@@ -1,0 +1,2602 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>使用量与计费 | CLIProxyAPI</title>
+  <script>
+    (function() {
+      try {
+        if (window.parent && window.parent.document && window.parent.document.documentElement) {
+          var pt = window.parent.document.documentElement.getAttribute('data-theme');
+          if (pt) document.documentElement.setAttribute('data-theme', pt);
+        }
+      } catch (e) {}
+    })();
+  </script>
+  <style>
+    :root {
+      --bg-page: transparent;
+      --bg-card: #ffffff;
+      --bg-tertiary: #f6f6f6;
+      --bg-hover: #f0f0f0;
+      --text-primary: #2d2a26;
+      --text-secondary: #6d6760;
+      --text-tertiary: #a29c95;
+      --text-quaternary: #c0bab3;
+      --border-color: #e5e5e5;
+      --border-primary: #d9d9d9;
+      --border-hover: #ccc;
+      --primary-color: #8b8680;
+      --success-color: #10b981;
+      --warning-color: #e0aa14;
+      --error-color: #c65746;
+      --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      --font-mono: ui-monospace, SFMono-Regular, Cascadia Mono, Cascadia Code, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    [data-theme="white"] {
+      --bg-page: transparent;
+      --bg-card: #ffffff;
+      --bg-tertiary: #f6f6f6;
+      --bg-hover: #f0f0f0;
+      --text-primary: #2d2a26;
+      --text-secondary: #6d6760;
+      --text-tertiary: #a29c95;
+      --border-color: #e5e5e5;
+      --border-hover: #ccc;
+    }
+
+    [data-theme="dark"] {
+      --bg-page: transparent;
+      --bg-card: #151412;
+      --bg-tertiary: #1d1b18;
+      --bg-hover: #262320;
+      --text-primary: #f6f4f1;
+      --text-secondary: #c9c3bb;
+      --text-tertiary: #9c958d;
+      --text-quaternary: #6f6962;
+      --border-color: #3a3530;
+      --border-hover: #5a544d;
+      --warning-color: #ffd862;
+      --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: transparent !important;
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100%;
+    }
+
+    .page-container {
+      width: 100%;
+      padding: 24px 32px 48px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      background: transparent;
+    }
+
+    /* Header matching CPA VaultHeader-module */
+    .header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 16px 24px;
+    }
+    .header-copy {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .page-title {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      line-height: 1.15;
+    }
+    .header-desc {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    /* CPA Segmented Pill Control */
+    .segmented-control {
+      border: 1px solid var(--border-color);
+      background: var(--bg-tertiary);
+      border-radius: 9999px;
+      align-items: center;
+      gap: 2px;
+      padding: 2px;
+      display: inline-flex;
+    }
+    .segment-btn {
+      cursor: pointer;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      background: transparent;
+      border: 0;
+      border-radius: 9999px;
+      padding: 5px 12px;
+      font-size: 12px;
+      font-weight: 550;
+      line-height: 1.3;
+      transition: color .15s, background-color .15s;
+    }
+    .segment-btn:hover:not(.active) {
+      color: var(--text-primary);
+    }
+    .segment-btn.active {
+      color: var(--text-primary);
+      background: var(--bg-card);
+      font-weight: 650;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+    }
+
+    /* Action Buttons */
+    .action-btn {
+      cursor: pointer;
+      color: var(--text-secondary);
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 9999px;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      font-size: 12.5px;
+      font-weight: 550;
+      display: inline-flex;
+      transition: color .15s, border-color .15s, background-color .15s;
+      user-select: none;
+    }
+    .action-btn:hover {
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+      background: var(--bg-hover);
+    }
+    .action-btn svg {
+      flex-shrink: 0;
+    }
+    .action-danger {
+      color: var(--error-color);
+    }
+    .action-danger:hover {
+      border-color: var(--error-color);
+      color: var(--error-color);
+    }
+    .action-select {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 9999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 550;
+      color: var(--text-secondary);
+      outline: none;
+      cursor: pointer;
+    }
+    .action-select:focus {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+    }
+
+    /* Active Filters Indicator Bar */
+    .active-filters-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      font-size: 12.5px;
+      padding: 8px 12px;
+      background: color-mix(in srgb, var(--primary-color) 8%, var(--bg-card));
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+    .active-filter-label {
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 11.5px;
+      text-transform: uppercase;
+    }
+    .filter-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 9999px;
+      padding: 3px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-primary);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .filter-chip-remove {
+      cursor: pointer;
+      color: var(--text-tertiary);
+      border: none;
+      background: transparent;
+      display: inline-flex;
+      align-items: center;
+      padding: 0;
+      font-size: 12px;
+      line-height: 1;
+    }
+    .filter-chip-remove:hover {
+      color: var(--error-color);
+    }
+    .btn-reset-filters {
+      cursor: pointer;
+      background: transparent;
+      border: none;
+      color: var(--error-color);
+      font-size: 12px;
+      font-weight: 500;
+      margin-left: auto;
+      text-decoration: underline;
+    }
+
+    /* CPA Stat Tiles */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+    @media (max-width: 960px) {
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 520px) {
+      .stats-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    .stat-tile {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      box-shadow: var(--card-shadow);
+      transition: border-color 0.15s ease;
+    }
+    .stat-tile:hover {
+      border-color: var(--border-hover);
+    }
+    .stat-tile::before {
+      content: "";
+      width: 24px;
+      height: 3px;
+      border-radius: 9999px;
+      background: var(--tile-accent, var(--primary-color));
+      margin-bottom: 10px;
+      display: block;
+    }
+    .stat-label {
+      color: var(--text-secondary);
+      font-size: 11.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .stat-value {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      margin: 4px 0 2px;
+    }
+    .stat-hint {
+      color: var(--text-tertiary);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Tab Bar */
+    .tab-bar {
+      border-bottom: 1px solid var(--border-color);
+      gap: 4px;
+      display: flex;
+      margin-top: 2px;
+    }
+    .tab-item {
+      cursor: pointer;
+      font: inherit;
+      color: var(--text-secondary);
+      background: transparent;
+      border: none;
+      outline: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color .15s, border-color .15s;
+    }
+    .tab-item:hover {
+      color: var(--text-primary);
+    }
+    .tab-item.active {
+      color: var(--text-primary);
+      border-bottom-color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Combinable Filter Bar (Orthogonal Multi-Filter Toolbar) */
+    .filter-console {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 8px 12px;
+      box-shadow: var(--card-shadow);
+    }
+    .filter-ctrl {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      height: 32px;
+      padding: 0 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      outline: none;
+      transition: border-color .15s;
+      cursor: pointer;
+    }
+    .filter-ctrl:focus {
+      border-color: var(--border-hover);
+    }
+    .search-input-wrap {
+      display: flex;
+      align-items: center;
+      position: relative;
+      min-width: 180px;
+      flex: 1;
+    }
+    .search-input {
+      width: 100%;
+      border-radius: 6px;
+      height: 32px;
+      font-size: 12px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      padding: 0 10px 0 28px;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .search-input:focus {
+      border-color: var(--border-hover);
+      background: var(--bg-card);
+    }
+    .search-svg {
+      position: absolute;
+      left: 8px;
+      color: var(--text-quaternary);
+      pointer-events: none;
+    }
+
+    /* Charts Grid */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 960px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+    .chart-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--card-shadow);
+      position: relative;
+    }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .chart-title {
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .chart-legend {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 11.5px;
+      color: var(--text-secondary);
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .legend-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 2px;
+    }
+    .canvas-wrap {
+      position: relative;
+      width: 100%;
+      height: 240px;
+    }
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+    }
+
+    /* Horizontal Bar Ranking Component */
+    .bar-ranking-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-top: 4px;
+    }
+    .bar-ranking-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .bar-item-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12.5px;
+    }
+    .bar-item-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+    }
+    .bar-item-val {
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+    }
+    .bar-track {
+      width: 100%;
+      height: 6px;
+      background: var(--bg-tertiary);
+      border-radius: 9999px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 9999px;
+      background: var(--primary-color);
+      transition: width .3s ease;
+    }
+
+    /* Tables */
+    .table-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--card-shadow);
+    }
+    .table-scroll {
+      overflow-x: auto;
+      width: 100%;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      background: var(--bg-tertiary);
+      padding: 10px 16px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+      text-align: left;
+    }
+    th.num, td.num {
+      text-align: right;
+    }
+    td {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-primary);
+      white-space: nowrap;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    tr:hover td {
+      background: var(--bg-hover);
+    }
+
+    /* Drill-down Button in Tables */
+    .btn-drill {
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      font-size: 11.5px;
+      font-weight: 500;
+      padding: 3px 8px;
+      transition: all .15s;
+    }
+    .btn-drill:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-success {
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--success-color);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    .badge-danger {
+      background: rgba(198, 87, 70, 0.12);
+      color: var(--error-color);
+      border: 1px solid rgba(198, 87, 70, 0.25);
+    }
+    .badge-neutral {
+      background: rgba(139, 134, 128, 0.15);
+      color: var(--text-secondary);
+    }
+
+    /* Pagination */
+    .table-footer {
+      padding: 11px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--border-color);
+      font-size: 12.5px;
+      color: var(--text-secondary);
+    }
+
+    /* Modals (Cleanup & Detail) */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      backdrop-filter: blur(2px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 16px;
+    }
+    .modal-backdrop.active { display: flex; }
+    .modal-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 540px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+    }
+    .modal-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg-tertiary);
+    }
+    .modal-body {
+      padding: 18px;
+      overflow-y: auto;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .modal-footer {
+      padding: 12px 18px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      background: var(--bg-tertiary);
+    }
+
+    .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+    .form-input {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      height: 36px;
+      padding: 0 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      outline: none;
+    }
+    .form-input:focus {
+      border-color: var(--border-hover);
+    }
+
+    .modal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 16px;
+      margin-bottom: 12px;
+    }
+    .grid-cell { display: flex; flex-direction: column; gap: 2px; }
+    .cell-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; }
+    .cell-value { font-weight: 500; word-break: break-all; }
+    pre.code-viewer {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 10px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--text-primary);
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
+    .font-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+    .text-emerald { color: var(--success-color) !important; }
+
+
+    /* CPA Custom Dropdown & Popover System (Replaces ugly native OS select) */
+    .cpa-dropdown {
+      position: relative;
+      display: inline-flex;
+    }
+    .cpa-dropdown-trigger {
+      cursor: pointer;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      border-radius: 6px;
+      height: 32px;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      outline: none;
+      transition: border-color .15s, color .15s, background .15s;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .cpa-dropdown-trigger:hover {
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+      background: var(--bg-hover);
+    }
+    .cpa-dropdown-trigger.pill {
+      border-radius: 9999px;
+      height: 30px;
+      padding: 0 12px;
+      background: var(--bg-card);
+    }
+    .cpa-dropdown-arrow {
+      color: var(--text-quaternary);
+      transition: transform .15s ease;
+      flex-shrink: 0;
+    }
+    .cpa-dropdown.open .cpa-dropdown-arrow {
+      transform: rotate(180deg);
+    }
+    .cpa-dropdown-popover {
+      position: absolute;
+      top: calc(100% + 5px);
+      left: 0;
+      min-width: 140px;
+      max-width: 300px;
+      max-height: 240px;
+      overflow-y: auto;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.06);
+      padding: 4px;
+      z-index: 1000;
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      animation: popoverFadeIn .12s cubic-bezier(0, 0, 0.2, 1);
+    }
+    .cpa-dropdown-popover.right-align {
+      left: auto;
+      right: 0;
+    }
+    .cpa-dropdown-popover.open {
+      display: flex;
+    }
+    @keyframes popoverFadeIn {
+      from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .cpa-option {
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      transition: background .12s, color .12s;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .cpa-option:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    .cpa-option.selected {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+    .cpa-option .check-icon {
+      color: var(--success-color);
+      flex-shrink: 0;
+    }
+
+    /* Floating Tooltip */
+    .chart-tooltip {
+      position: fixed;
+      pointer-events: none;
+      z-index: 1000;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text-primary);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+      transform: translate(-50%, -125%);
+      white-space: nowrap;
+      transition: opacity .08s ease;
+    }
+    .tooltip-header {
+      font-weight: 600;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      margin-top: 2px;
+    }
+    .tooltip-val {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <!-- Header -->
+    <header class="header-row">
+      <div class="header-copy">
+        <h1 class="page-title">使用量与计费</h1>
+        <p class="header-desc">实时模型调用审计、Token 吞吐分布与美刀成本核算</p>
+      </div>
+      <div class="header-actions">
+        <div class="segmented-control" id="rangeControl">
+          <button class="segment-btn active" data-range="24h">24 小时</button>
+          <button class="segment-btn" data-range="7d">7 天</button>
+          <button class="segment-btn" data-range="30d">30 天</button>
+          <button class="segment-btn" data-range="all">全部</button>
+        </div>
+        <button id="btnRefresh" class="action-btn" title="刷新数据">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+          刷新
+        </button>
+        <button id="btnExport" class="action-btn" title="导出 CSV">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          导出 CSV
+        </button>
+        <button id="btnOpenCleanupModal" class="action-btn action-danger" title="按日期或保留期清理历史数据">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+          数据清理
+        </button>
+        <div class="cpa-dropdown" id="dropdownAutoRefresh"></div>
+      </div>
+    </header>
+
+    <!-- Active Filters Indicator Bar (Shows all active filter combinations with one-click remove) -->
+    <div class="active-filters-bar" id="activeFiltersBar" style="display: none;">
+      <span class="active-filter-label">当前组合筛选：</span>
+      <div id="filterChipsList" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+      <button class="btn-reset-filters" id="btnResetAllFilters">重置全部筛选</button>
+    </div>
+
+    <!-- Stat Cards (4 Tiles) -->
+    <div class="stats-grid">
+      <div class="stat-tile" style="--tile-accent: var(--success-color);">
+        <span class="stat-label">预估总支出 (USD)</span>
+        <div class="stat-value" id="kpi-cost">$0.00</div>
+        <div class="stat-hint">实时计费 · Prompt Cache 减免已折算</div>
+      </div>
+      <div class="stat-tile" style="--tile-accent: var(--primary-color);">
+        <span class="stat-label">调用总次数</span>
+        <div class="stat-value" id="kpi-requests">0</div>
+        <div class="stat-hint"><span id="kpi-success-rate">成功率 —</span> · <span id="kpi-failed-count">0 失败</span></div>
+      </div>
+      <div class="stat-tile" style="--tile-accent: var(--primary-color);">
+        <span class="stat-label">Token 消耗总量</span>
+        <div class="stat-value" id="kpi-tokens">0</div>
+        <div class="stat-hint"><span id="kpi-tokens-in">输入 0</span> · <span id="kpi-tokens-out">输出 0</span></div>
+      </div>
+      <div class="stat-tile" style="--tile-accent: var(--warning-color);">
+        <span class="stat-label">缓存读取命中 (Hit)</span>
+        <div class="stat-value" id="kpi-cache-read">0</div>
+        <div class="stat-hint"><span id="kpi-cache-creation">缓存写入 0 Tokens</span></div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tab-bar">
+      <button class="tab-item active" data-tab="tab-overview">概览走势</button>
+      <button class="tab-item" data-tab="tab-models">模型透视</button>
+      <button class="tab-item" data-tab="tab-providers">AI 提供商</button>
+      <button class="tab-item" data-tab="tab-auths">认证文件 (账号)</button>
+      <button class="tab-item" data-tab="tab-keys">客户端 Key</button>
+      <button class="tab-item" data-tab="tab-logs">调用日志</button>
+    </div>
+
+    <!-- Combinable Filter Console (All filters can be freely combined and mixed) -->
+    <div class="filter-console">
+      <div class="cpa-dropdown" id="dropdownAPIKey"></div>
+      <div class="cpa-dropdown" id="dropdownAuthID"></div>
+      <div class="cpa-dropdown" id="dropdownProvider"></div>
+      <div class="cpa-dropdown" id="dropdownModel"></div>
+      <div class="cpa-dropdown" id="dropdownStatus"></div>
+      <div class="cpa-dropdown" id="dropdownInterval"></div>
+      <div class="search-input-wrap">
+        <svg class="search-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="filterSearch" class="search-input" placeholder="搜索模型 / 账号 / Key / 错误...">
+      </div>
+    </div>
+
+    <!-- TAB 1: OVERVIEW (Charts & Rankings) -->
+    <div id="tab-overview" class="tab-content">
+      <div class="charts-grid" style="margin-bottom: 16px;">
+        <!-- Chart 1: Line + Bar Chart -->
+        <div class="chart-box">
+          <div class="chart-header">
+            <span class="chart-title" id="trendChartTitle">请求量与美刀费用时序走势 (柱状图 + 折线图)</span>
+            <div class="chart-legend">
+              <div class="legend-item"><div class="legend-dot" style="background: var(--primary-color);"></div>请求量 (柱)</div>
+              <div class="legend-item"><div class="legend-dot" style="background: var(--success-color);"></div>费用 $ (线)</div>
+            </div>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="trendChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 2: Token Breakdown Doughnut Chart -->
+        <div class="chart-box">
+          <div class="chart-header">
+            <span class="chart-title">Token 构成与缓存命中分析 (饼状 / 环形图)</span>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="tokenDoughnut"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <!-- Chart 3: Model Cost Share Doughnut Chart -->
+        <div class="chart-box">
+          <div class="chart-header">
+            <span class="chart-title" id="modelPieTitle">各模型费用占比 (饼状图)</span>
+          </div>
+          <div class="canvas-wrap">
+            <canvas id="modelPieChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Chart 4: Top Models / Accounts Horizontal Bar Ranking -->
+        <div class="chart-box">
+          <div class="chart-header">
+            <span class="chart-title" id="modelRankingTitle">消耗排行 (横向柱状图)</span>
+            <div class="segmented-control" style="padding: 1px;">
+              <button type="button" class="segment-btn active" id="rankTabModels" onclick="switchRankingMode('models')" style="padding: 2px 8px; font-size: 11px;">按模型</button>
+              <button type="button" class="segment-btn" id="rankTabAuths" onclick="switchRankingMode('auths')" style="padding: 2px 8px; font-size: 11px;">按账号</button>
+            </div>
+          </div>
+          <div class="bar-ranking-list" id="modelRankingList">
+            <div style="text-align: center; color: var(--text-tertiary); padding: 40px 0; font-size: 13px;">暂无调用数据</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: MODELS -->
+    <div id="tab-models" class="tab-content" style="display: none;">
+      <div class="table-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="sortable" onclick="handleSort('models', 'model')">模型名称 <span id="sort-models-model" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('models', 'requests')">请求次数 <span id="sort-models-requests" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('models', 'total_tokens')">总 Token <span id="sort-models-total_tokens" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('models', 'input_tokens')">输入 Tokens <span id="sort-models-input_tokens" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('models', 'output_tokens')">输出 Tokens <span id="sort-models-output_tokens" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('models', 'total_cost')">预估费用 (USD) <span id="sort-models-total_cost" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('models', 'avg_latency_ms')">平均延迟 <span id="sort-models-avg_latency_ms" class="sort-arrow"></span></th>
+                <th style="text-align: center;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="modelsTableBody">
+              <tr><td colspan="8" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: PROVIDERS -->
+    <div id="tab-providers" class="tab-content" style="display: none;">
+      <div class="table-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="sortable" onclick="handleSort('providers', 'provider')">AI 提供商 <span id="sort-providers-provider" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('providers', 'requests')">请求次数 <span id="sort-providers-requests" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('providers', 'failed_count')">失败次数 <span id="sort-providers-failed_count" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('providers', 'total_tokens')">总 Token <span id="sort-providers-total_tokens" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('providers', 'total_cost')">预估费用 (USD) <span id="sort-providers-total_cost" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('providers', 'avg_latency_ms')">平均延迟 <span id="sort-providers-avg_latency_ms" class="sort-arrow"></span></th>
+                <th style="text-align: center;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="providersTableBody">
+              <tr><td colspan="7" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: AUTHS (Accounts) -->
+    <div id="tab-auths" class="tab-content" style="display: none;">
+      <div class="table-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="sortable" onclick="handleSort('auths', 'auth_id')">认证文件 (Auth ID / 账号) <span id="sort-auths-auth_id" class="sort-arrow"></span></th>
+                <th class="sortable" onclick="handleSort('auths', 'provider')">AI 提供商 <span id="sort-auths-provider" class="sort-arrow"></span></th>
+                <th>凭证类型</th>
+                <th class="num sortable" onclick="handleSort('auths', 'requests')">请求次数 <span id="sort-auths-requests" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('auths', 'failed_count')">失败次数 <span id="sort-auths-failed_count" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('auths', 'total_tokens')">总 Token <span id="sort-auths-total_tokens" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('auths', 'total_cost')">预估费用 (USD) <span id="sort-auths-total_cost" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('auths', 'avg_latency_ms')">平均延迟 <span id="sort-auths-avg_latency_ms" class="sort-arrow"></span></th>
+                <th style="text-align: center;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="authsTableBody">
+              <tr><td colspan="9" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: KEYS -->
+    <div id="tab-keys" class="tab-content" style="display: none;">
+      <div class="table-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th class="sortable" onclick="handleSort('keys', 'api_key')">客户端 API Key <span id="sort-keys-api_key" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('keys', 'requests')">请求次数 <span id="sort-keys-requests" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('keys', 'total_tokens')">总 Token 消耗 <span id="sort-keys-total_tokens" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('keys', 'total_cost')">预估费用 (USD) <span id="sort-keys-total_cost" class="sort-arrow"></span></th>
+                <th>最后活跃时间</th>
+                <th style="text-align: center;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="keysTableBody">
+              <tr><td colspan="6" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 6: LOGS -->
+    <div id="tab-logs" class="tab-content" style="display: none;">
+      <div class="table-container">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>请求时间</th>
+                <th>状态</th>
+                <th>模型</th>
+                <th>AI 提供商</th>
+                <th>认证文件</th>
+                <th>客户端 Key</th>
+                <th class="num">Tokens</th>
+                <th class="num">费用 (USD)</th>
+                <th class="num">延迟</th>
+                <th style="text-align: center;">明细</th>
+              </tr>
+            </thead>
+            <tbody id="logsTableBody">
+              <tr><td colspan="10" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无日志记录</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="logPaginationInfo">第 1 页，共 0 条</span>
+          <div style="display: flex; gap: 6px;">
+            <button id="btnPrevPage" class="action-btn" style="padding: 3px 8px; font-size: 11.5px;">上一页</button>
+            <button id="btnNextPage" class="action-btn" style="padding: 3px 8px; font-size: 11.5px;">下一页</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Professional Cleanup Dialog (Supports Clean by Date, Clean by Days, or Clear All) -->
+  <div id="cleanupModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 style="font-size: 14px; font-weight: 600;">清理历史使用量数据</h3>
+        <button id="closeCleanupModal" class="action-btn" style="padding: 2px 8px; font-size: 11px;">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-secondary); font-size: 13px;">
+          清理操作将安全删除本地 SQLite 数据库中的历史请求日志与统计数据。已保存的 CPA 认证配置与凭证不受影响。
+        </p>
+        <!-- Option 1: Clean by specific Date -->
+        <div class="form-row">
+          <label class="form-label">方式 1：删除指定某一日期之前的所有历史数据</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="date" id="cleanupSpecificDate" class="form-input" style="flex: 1;">
+            <button id="btnCleanByDate" class="action-btn action-danger">按此日期清理</button>
+          </div>
+        </div>
+        <!-- Option 2: Clean by Days -->
+        <div class="form-row">
+          <label class="form-label">方式 2：按保留天数清理（删除 N 天前的历史记录）</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="number" id="cleanupDaysInput" class="form-input" placeholder="保留最近天数（默认 90 天）" value="90" style="flex: 1;">
+            <button id="btnCleanByDays" class="action-btn action-danger">按天数清理</button>
+          </div>
+        </div>
+        <!-- Option 3: Reset All -->
+        <div class="form-row" style="padding-top: 6px; border-top: 1px dashed var(--border-color);">
+          <label class="form-label" style="color: var(--error-color);">方式 3：全量清空所有数据（归零）</label>
+          <button id="btnCleanAll" class="action-btn action-danger" style="width: 100%; justify-content: center; height: 34px;">清空全部记录</button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancelCleanup" class="action-btn">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Modal -->
+  <div id="detailModal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle" style="font-size: 13.5px; font-weight: 600;">请求明细</h3>
+        <button id="modalClose" class="action-btn" style="padding: 2px 8px; font-size: 11px;">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-grid" id="modalGrid"></div>
+        <div id="modalErrorSection" style="display: none;">
+          <div class="cell-label" style="color: var(--error-color); margin-bottom: 4px;">上游错误响应</div>
+          <pre class="code-viewer" id="modalErrorBody"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Chart Tooltip -->
+  <div id="chartTooltip" class="chart-tooltip" style="display: none;"></div>
+
+  <script>
+    // State management supporting full orthogonal filter combinations
+    const state = {
+      activeTab: 'tab-overview',
+      range: '24h',
+      // Orthogonal combinable filters
+      filterAPIKey: '',
+      filterAuthID: '',
+      filterProvider: '',
+      filterModel: '',
+      filterStatus: '',
+      searchQuery: '',
+      // Pagination & datasets
+      page: 1,
+      pageSize: 20,
+      totalLogs: 0,
+      logsData: [],
+      modelsData: [],
+      authsData: [],
+      keysData: []
+    };
+
+    function getAPIBase() {
+      const p = window.location.pathname;
+      if (p.includes('/v0/resource/plugins/cpa-usage')) {
+        return '/v0/resource/plugins/cpa-usage/api';
+      }
+      if (p.includes('/v0/management/usage')) {
+        return '/v0/management/usage/api';
+      }
+      return '/v0/resource/plugins/cpa-usage/api';
+    }
+    const API_BASE = getAPIBase();
+
+    // Escapes a value for safe interpolation into HTML text or attribute context.
+    function esc(v) {
+      if (v === null || v === undefined) return '';
+      return String(v).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[c]);
+    }
+
+    // Renders a value as a JS string literal that is safe inside an HTML attribute.
+    function jsArg(v) {
+      return esc(JSON.stringify(v === null || v === undefined ? '' : String(v)));
+    }
+
+    function formatNumber(n) {
+      if (!n || n <= 0) return '0';
+      if (n >= 1e9) return (n / 1e9).toFixed(2) + 'B';
+      if (n >= 1e6) return (n / 1e6).toFixed(2) + 'M';
+      if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+      return n.toLocaleString();
+    }
+
+    function formatCost(c) {
+      if (!c || c <= 0) return '$0.00';
+      if (c < 0.0001) return '$' + c.toFixed(6);
+      if (c < 1.0) return '$' + c.toFixed(4);
+      return '$' + c.toFixed(2);
+    }
+
+    // Build URL query params representing the EXACT INTERSECTION of all active filters
+    function getFilterParams() {
+      const params = new URLSearchParams();
+      const range = state.range;
+      const now = new Date();
+
+      if (range === 'today') {
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        params.set('start_time', start.toISOString());
+      } else if (range === '24h') {
+        params.set('start_time', new Date(now.getTime() - 24*3600*1000).toISOString());
+      } else if (range === '7d') {
+        params.set('start_time', new Date(now.getTime() - 7*24*3600*1000).toISOString());
+      } else if (range === '30d') {
+        params.set('start_time', new Date(now.getTime() - 30*24*3600*1000).toISOString());
+      }
+
+      if (state.filterAPIKey) params.set('api_key', state.filterAPIKey);
+      if (state.filterAuthID) params.set('auth_id', state.filterAuthID);
+      if (state.filterProvider) params.set('provider', state.filterProvider);
+      if (state.filterModel) params.set('model', state.filterModel);
+      if (state.filterStatus !== '') params.set('failed', state.filterStatus);
+      if (state.searchQuery) params.set('search', state.searchQuery);
+
+      return params;
+    }
+
+    // Render Active Filter Chips bar
+    function updateActiveFilterChips() {
+      const bar = document.getElementById('activeFiltersBar');
+      const list = document.getElementById('filterChipsList');
+
+      const chips = [];
+      if (state.filterAPIKey) {
+        chips.push({ key: 'key', label: `Key: ${state.filterAPIKey.substring(0, 14)}...`, onRemove: () => { state.filterAPIKey = ''; } });
+      }
+      if (state.filterAuthID) {
+        chips.push({ key: 'auth', label: `账号: ${state.filterAuthID}`, onRemove: () => { state.filterAuthID = ''; } });
+      }
+      if (state.filterProvider) {
+        chips.push({ key: 'prov', label: `提供商: ${state.filterProvider}`, onRemove: () => { state.filterProvider = ''; } });
+      }
+      if (state.filterModel) {
+        chips.push({ key: 'model', label: `模型: ${state.filterModel}`, onRemove: () => { state.filterModel = ''; } });
+      }
+      if (state.filterStatus === 'false') {
+        chips.push({ key: 'status', label: '仅成功 (200 OK)', onRemove: () => { state.filterStatus = ''; } });
+      } else if (state.filterStatus === 'true') {
+        chips.push({ key: 'status', label: '仅异常 (4xx/5xx)', onRemove: () => { state.filterStatus = ''; } });
+      }
+      if (state.searchQuery) {
+        chips.push({ key: 'search', label: `搜索: "${state.searchQuery}"`, onRemove: () => { state.searchQuery = ''; const s = document.getElementById('filterSearch'); if (s) s.value = ''; } });
+      }
+
+      if (chips.length === 0) {
+        bar.style.display = 'none';
+        return;
+      }
+
+      bar.style.display = 'flex';
+      list.innerHTML = chips.map((c, i) => `
+        <span class="filter-chip">
+          <span>${esc(c.label)}</span>
+          <button type="button" class="filter-chip-remove" onclick="removeFilterChip(${i})">✕</button>
+        </span>
+      `).join('');
+
+      window._currentFilterChips = chips;
+    }
+
+    function syncDropdownsFromState() {
+      renderDynamicDropdowns(state.cachedOptions);
+      renderCustomDropdown('dropdownStatus', [
+        { label: '全部状态', value: '' },
+        { label: '仅成功 (200 OK)', value: 'false' },
+        { label: '仅异常 (4xx/5xx)', value: 'true' }
+      ], state.filterStatus, '全部状态', (val) => {
+        state.filterStatus = val;
+        updateActiveFilterChips();
+        state.page = 1;
+        loadActiveTabData();
+      });
+    }
+
+    window.removeFilterChip = function(idx) {
+      if (window._currentFilterChips && window._currentFilterChips[idx]) {
+        window._currentFilterChips[idx].onRemove();
+        syncDropdownsFromState();
+        updateActiveFilterChips();
+        state.page = 1;
+        loadActiveTabData();
+      }
+    };
+
+    document.getElementById('btnResetAllFilters').addEventListener('click', () => {
+      state.filterAPIKey = '';
+      state.filterAuthID = '';
+      state.filterProvider = '';
+      state.filterModel = '';
+      state.filterStatus = '';
+      state.searchQuery = '';
+      const s = document.getElementById('filterSearch');
+      if (s) s.value = '';
+      syncDropdownsFromState();
+      updateActiveFilterChips();
+      state.page = 1;
+      loadActiveTabData();
+    });
+
+    // Custom Popover Dropdown Renderer
+    function renderCustomDropdown(containerId, options, currentValue, placeholder, onChange, isPill = false, isRight = false) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+
+      const selected = options.find(o => String(o.value) === String(currentValue));
+      const displayText = selected ? selected.label : placeholder;
+
+      container.className = `cpa-dropdown ${isRight ? 'right-align' : ''}`;
+      container.innerHTML = `
+        <button type="button" class="cpa-dropdown-trigger ${isPill ? 'pill' : ''}">
+          <span class="cpa-dropdown-label">${esc(displayText)}</span>
+          <svg class="cpa-dropdown-arrow" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <div class="cpa-dropdown-popover ${isRight ? 'right-align' : ''}">
+          ${options.map(o => `
+            <div class="cpa-option ${String(o.value) === String(currentValue) ? 'selected' : ''}" data-value="${esc(o.value)}">
+              <span>${esc(o.label)}</span>
+              ${String(o.value) === String(currentValue) ? '<svg class="check-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>' : ''}
+            </div>
+          `).join('')}
+        </div>
+      `;
+
+      const trigger = container.querySelector('.cpa-dropdown-trigger');
+      const popover = container.querySelector('.cpa-dropdown-popover');
+
+      trigger.onclick = function(e) {
+        e.stopPropagation();
+        const wasOpen = popover.classList.contains('open');
+        document.querySelectorAll('.cpa-dropdown-popover.open').forEach(p => p.classList.remove('open'));
+        document.querySelectorAll('.cpa-dropdown.open').forEach(d => d.classList.remove('open'));
+        if (!wasOpen) {
+          popover.classList.add('open');
+          container.classList.add('open');
+        }
+      };
+
+      container.querySelectorAll('.cpa-option').forEach(opt => {
+        opt.onclick = function(e) {
+          e.stopPropagation();
+          const val = opt.getAttribute('data-value');
+          popover.classList.remove('open');
+          container.classList.remove('open');
+          renderCustomDropdown(containerId, options, val, placeholder, onChange, isPill, isRight);
+          onChange(val);
+        };
+      });
+    }
+
+    // Close popovers on click outside
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.cpa-dropdown-popover.open').forEach(p => p.classList.remove('open'));
+      document.querySelectorAll('.cpa-dropdown.open').forEach(d => d.classList.remove('open'));
+    });
+
+    // Initialize all static custom dropdowns
+    function initDropdowns() {
+      // Auto Refresh
+      renderCustomDropdown('dropdownAutoRefresh', [
+        { label: '自动刷新: 关', value: '0' },
+        { label: '5s 刷新', value: '5' },
+        { label: '15s 刷新', value: '15' },
+        { label: '30s 刷新', value: '30' }
+      ], '15', '自动刷新: 关', (val) => {
+        if (state.timer) clearInterval(state.timer);
+        const sec = parseInt(val);
+        if (sec > 0) {
+          state.timer = setInterval(loadActiveTabData, sec * 1000);
+        }
+      }, true, true);
+
+      // Status Filter
+      renderCustomDropdown('dropdownStatus', [
+        { label: '全部状态', value: '' },
+        { label: '仅成功 (200 OK)', value: 'false' },
+        { label: '仅异常 (4xx/5xx)', value: 'true' }
+      ], state.filterStatus, '全部状态', (val) => {
+        state.filterStatus = val;
+        updateActiveFilterChips();
+        state.page = 1;
+        loadActiveTabData();
+      });
+
+      // Interval Filter
+      renderCustomDropdown('dropdownInterval', [
+        { label: '按分钟', value: 'minute' },
+        { label: '按小时', value: 'hour' },
+        { label: '按天', value: 'day' }
+      ], 'hour', '按小时', (val) => {
+        state.interval = val;
+        loadTimeSeries();
+      });
+
+      // Placeholders for dynamic dropdowns
+      renderDynamicDropdowns({ api_keys: [], auth_ids: [], models: [], providers: [] });
+    }
+
+    function renderDynamicDropdowns(data) {
+      const keyOpts = [{ label: '全部客户端 Key', value: '' }, ...(data.api_keys || []).map(k => ({ label: k, value: k }))];
+      renderCustomDropdown('dropdownAPIKey', keyOpts, state.filterAPIKey, '全部客户端 Key', (val) => {
+        state.filterAPIKey = val;
+        updateActiveFilterChips();
+        state.page = 1;
+        loadActiveTabData();
+      });
+
+      const authOpts = [{ label: '全部认证文件 (账号)', value: '' }, ...(data.auth_ids || []).map(a => ({ label: a, value: a }))];
+      renderCustomDropdown('dropdownAuthID', authOpts, state.filterAuthID, '全部认证文件 (账号)', (val) => {
+        state.filterAuthID = val;
+        updateActiveFilterChips();
+        state.page = 1;
+        loadActiveTabData();
+      });
+
+      const provOpts = [{ label: '全部提供商', value: '' }, ...(data.providers || []).map(p => ({ label: p, value: p }))];
+      renderCustomDropdown('dropdownProvider', provOpts, state.filterProvider, '全部提供商', (val) => {
+        state.filterProvider = val;
+        updateActiveFilterChips();
+        state.page = 1;
+        loadActiveTabData();
+      });
+
+      const modelOpts = [{ label: '全部模型', value: '' }, ...(data.models || []).map(m => ({ label: m, value: m }))];
+      renderCustomDropdown('dropdownModel', modelOpts, state.filterModel, '全部模型', (val) => {
+        state.filterModel = val;
+        updateActiveFilterChips();
+        state.page = 1;
+        loadActiveTabData();
+      });
+    }
+
+    let searchTimer = null;
+    document.getElementById('filterSearch').addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        state.searchQuery = e.target.value.trim();
+        updateActiveFilterChips();
+        state.page = 1;
+        loadActiveTabData();
+      }, 300);
+    });
+
+    // Drill-down functions from Table Rows
+    window.focusAuth = function(authId) {
+      state.filterAuthID = authId;
+      syncDropdownsFromState();
+      updateActiveFilterChips();
+      switchToTab('tab-overview');
+    };
+
+    window.focusModel = function(modelName) {
+      state.filterModel = modelName;
+      syncDropdownsFromState();
+      updateActiveFilterChips();
+      switchToTab('tab-overview');
+    };
+
+    window.focusProvider = function(provider) {
+      state.filterProvider = provider;
+      syncDropdownsFromState();
+      updateActiveFilterChips();
+      switchToTab('tab-overview');
+    };
+
+    window.focusKey = function(key) {
+      state.filterAPIKey = key;
+      syncDropdownsFromState();
+      updateActiveFilterChips();
+      switchToTab('tab-overview');
+    };
+
+    function switchToTab(tabId) {
+      document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+      const btn = document.querySelector(`.tab-item[data-tab="${tabId}"]`);
+      if (btn) btn.classList.add('active');
+      state.activeTab = tabId;
+      document.getElementById(tabId).style.display = 'block';
+      loadActiveTabData();
+    }
+
+    // Range pills
+    document.querySelectorAll('.segment-btn').forEach(pill => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('.segment-btn').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        state.range = pill.getAttribute('data-range');
+        state.page = 1;
+        loadActiveTabData();
+      });
+    });
+
+    // Tab buttons
+    document.querySelectorAll('.tab-item').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tabId = btn.getAttribute('data-tab');
+        switchToTab(tabId);
+      });
+    });
+
+    async function fetchJSON(url, opts) {
+      const res = await fetch(url, opts);
+      if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + (await res.text()));
+      return await res.json();
+    }
+
+    async function loadFilterOptions() {
+      try {
+        const data = await fetchJSON(API_BASE + '/filter-options');
+        state.cachedOptions = data;
+        renderDynamicDropdowns(data);
+      } catch (err) {
+        console.error('load filter options failed:', err);
+      }
+    }
+
+    async function loadSummary() {
+      try {
+        const p = getFilterParams();
+        const data = await fetchJSON(API_BASE + '/summary?' + p.toString());
+
+        const totalReq = data.total_requests || 0;
+        const totalCost = data.total_cost || 0;
+        const totalTok = data.total_tokens || 0;
+
+        document.getElementById('kpi-cost').textContent = formatCost(totalCost);
+        document.getElementById('kpi-requests').textContent = totalReq > 0 ? totalReq.toLocaleString() : '0';
+
+        if (totalReq > 0) {
+          const successRate = ((data.success_requests / totalReq) * 100).toFixed(1) + '%';
+          document.getElementById('kpi-success-rate').textContent = '成功率 ' + successRate;
+          document.getElementById('kpi-failed-count').textContent = (data.failed_requests || 0) + ' 失败';
+        } else {
+          document.getElementById('kpi-success-rate').textContent = '成功率 —';
+          document.getElementById('kpi-failed-count').textContent = '0 失败';
+        }
+
+        document.getElementById('kpi-tokens').textContent = formatNumber(totalTok);
+        document.getElementById('kpi-tokens-in').textContent = '输入 ' + formatNumber(data.input_tokens);
+        document.getElementById('kpi-tokens-out').textContent = '输出 ' + formatNumber(data.output_tokens);
+
+        document.getElementById('kpi-cache-read').textContent = formatNumber(data.cache_read_tokens);
+        document.getElementById('kpi-cache-creation').textContent = '缓存写入 ' + formatNumber(data.cache_creation_tokens) + ' Tokens';
+
+        renderTokenDoughnut(data);
+      } catch (err) {
+        console.error('load summary failed:', err);
+      }
+    }
+
+    async function loadTimeSeries() {
+      try {
+        const p = getFilterParams();
+        p.set('interval', state.interval || 'hour');
+        const points = await fetchJSON(API_BASE + '/timeseries?' + p.toString());
+        renderTrendChart(points || []);
+      } catch (err) {
+        console.error('load timeseries failed:', err);
+      }
+    }
+
+    // Interactive Column Sorting State
+    const sortState = {
+      models: { field: 'total_cost', asc: false },
+      providers: { field: 'total_cost', asc: false },
+      auths: { field: 'total_cost', asc: false },
+      keys: { field: 'total_cost', asc: false }
+    };
+
+    function sortList(list, field, asc) {
+      return [...list].sort((a, b) => {
+        let vA = a[field];
+        let vB = b[field];
+        if (typeof vA === 'string') {
+          return asc ? vA.localeCompare(vB) : vB.localeCompare(vA);
+        }
+        vA = Number(vA) || 0;
+        vB = Number(vB) || 0;
+        return asc ? vA - vB : vB - vA;
+      });
+    }
+
+    function updateSortIndicators(tableName) {
+      const current = sortState[tableName];
+      document.querySelectorAll(`[id^="sort-${tableName}-"]`).forEach(el => {
+        el.textContent = '';
+      });
+      const activeEl = document.getElementById(`sort-${tableName}-${current.field}`);
+      if (activeEl) {
+        activeEl.textContent = current.asc ? '▲' : '▼';
+      }
+    }
+
+    window.handleSort = function(tableName, field) {
+      const cur = sortState[tableName];
+      if (cur.field === field) {
+        cur.asc = !cur.asc;
+      } else {
+        cur.field = field;
+        cur.asc = false;
+      }
+      if (tableName === 'models') renderModelsTable();
+      if (tableName === 'providers') renderProvidersTable();
+      if (tableName === 'auths') renderAuthsTable();
+      if (tableName === 'keys') renderKeysTable();
+    };
+
+    function renderModelsTable() {
+      updateSortIndicators('models');
+      const tbody = document.getElementById('modelsTableBody');
+      const data = sortList(state.modelsData, sortState.models.field, sortState.models.asc);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配模型数据</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(m => `
+        <tr>
+          <td class="font-mono"><strong>${esc(m.model)}</strong></td>
+          <td class="num font-mono">${m.requests.toLocaleString()}</td>
+          <td class="num font-mono">${formatNumber(m.total_tokens)}</td>
+          <td class="num font-mono">${formatNumber(m.input_tokens)}</td>
+          <td class="num font-mono">${formatNumber(m.output_tokens)}</td>
+          <td class="num font-mono text-emerald"><strong>${formatCost(m.total_cost)}</strong></td>
+          <td class="num font-mono">${m.avg_latency_ms.toFixed(0)} ms</td>
+          <td style="text-align: center;">
+            <button class="btn-drill" onclick="focusModel(${jsArg(m.model)})">分析走势 →</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadModels() {
+      try {
+        const p = getFilterParams();
+        const models = await fetchJSON(API_BASE + '/models?' + p.toString());
+        state.modelsData = models || [];
+        renderModelPie(state.modelsData);
+        renderModelRankings(state.modelsData);
+        renderModelsTable();
+      } catch (err) {
+        console.error('load models failed:', err);
+      }
+    }
+
+    function renderProvidersTable() {
+      updateSortIndicators('providers');
+      const tbody = document.getElementById('providersTableBody');
+      const data = sortList(state.providersData || [], sortState.providers.field, sortState.providers.asc);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配数据</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(item => `
+        <tr>
+          <td class="font-mono"><strong>${esc(item.provider)}</strong></td>
+          <td class="num font-mono">${item.requests.toLocaleString()}</td>
+          <td class="num font-mono">${item.failed_count > 0 ? `<span class="badge badge-danger">${item.failed_count}</span>` : '0'}</td>
+          <td class="num font-mono">${formatNumber(item.total_tokens)}</td>
+          <td class="num font-mono text-emerald"><strong>${formatCost(item.total_cost)}</strong></td>
+          <td class="num font-mono">${(item.count > 0 ? (item.latency_sum / item.count).toFixed(0) : 0)} ms</td>
+          <td style="text-align: center;">
+            <button class="btn-drill" onclick="focusProvider(${jsArg(item.provider)})">聚焦分析 →</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadProviders() {
+      try {
+        const p = getFilterParams();
+        const auths = await fetchJSON(API_BASE + '/auths?' + p.toString());
+        if (!auths || auths.length === 0) {
+          state.providersData = [];
+          renderProvidersTable();
+          return;
+        }
+
+        const provMap = {};
+        auths.forEach(a => {
+          const k = a.provider || 'unknown';
+          if (!provMap[k]) {
+            provMap[k] = { provider: k, requests: 0, failed_count: 0, total_tokens: 0, total_cost: 0, latency_sum: 0, count: 0, avg_latency_ms: 0 };
+          }
+          provMap[k].requests += a.requests;
+          provMap[k].failed_count += a.failed_count;
+          provMap[k].total_tokens += a.total_tokens;
+          provMap[k].total_cost += a.total_cost;
+          provMap[k].latency_sum += a.avg_latency_ms * a.requests;
+          provMap[k].count += a.requests;
+          provMap[k].avg_latency_ms = provMap[k].count > 0 ? provMap[k].latency_sum / provMap[k].count : 0;
+        });
+
+        state.providersData = Object.values(provMap);
+        renderProvidersTable();
+      } catch (err) {
+        console.error('load providers failed:', err);
+      }
+    }
+
+    function renderAuthsTable() {
+      updateSortIndicators('auths');
+      const tbody = document.getElementById('authsTableBody');
+      const data = sortList(state.authsData || [], sortState.auths.field, sortState.auths.asc);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配数据</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(a => `
+        <tr>
+          <td class="font-mono"><strong>${esc(a.auth_id)}</strong></td>
+          <td><span class="badge badge-neutral">${esc(a.provider)}</span></td>
+          <td>${esc(a.auth_type) || '—'}</td>
+          <td class="num font-mono">${a.requests.toLocaleString()}</td>
+          <td class="num font-mono">${a.failed_count > 0 ? `<span class="badge badge-danger">${a.failed_count}</span>` : '0'}</td>
+          <td class="num font-mono">${formatNumber(a.total_tokens)}</td>
+          <td class="num font-mono text-emerald"><strong>${formatCost(a.total_cost)}</strong></td>
+          <td class="num font-mono">${a.avg_latency_ms.toFixed(0)} ms</td>
+          <td style="text-align: center;">
+            <button class="btn-drill" onclick="focusAuth(${jsArg(a.auth_id)})">账号走势与模型分布 →</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadAuths() {
+      try {
+        const p = getFilterParams();
+        const auths = await fetchJSON(API_BASE + '/auths?' + p.toString());
+        state.authsData = auths || [];
+        renderAuthsTable();
+      } catch (err) {
+        console.error('load auths failed:', err);
+      }
+    }
+
+    function renderKeysTable() {
+      updateSortIndicators('keys');
+      const tbody = document.getElementById('keysTableBody');
+      const data = sortList(state.keysData || [], sortState.keys.field, sortState.keys.asc);
+      if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配数据</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(k => `
+        <tr>
+          <td class="font-mono">${k.api_key ? esc(k.api_key) : '<em style="color:var(--text-tertiary)">(default)</em>'}</td>
+          <td class="num font-mono">${k.requests.toLocaleString()}</td>
+          <td class="num font-mono">${formatNumber(k.total_tokens)}</td>
+          <td class="num font-mono text-emerald"><strong>${formatCost(k.total_cost)}</strong></td>
+          <td>${k.last_used_at ? new Date(k.last_used_at).toLocaleString() : '—'}</td>
+          <td style="text-align: center;">
+            <button class="btn-drill" onclick="focusKey(${jsArg(k.api_key)})">Key 走势 →</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadAPIKeys() {
+      try {
+        const p = getFilterParams();
+        const keys = await fetchJSON(API_BASE + '/keys?' + p.toString());
+        state.keysData = keys || [];
+        renderKeysTable();
+      } catch (err) {
+        console.error('load keys failed:', err);
+      }
+    }
+
+    async function loadLogs() {
+      try {
+        const p = getFilterParams();
+        p.set('page', state.page);
+        p.set('page_size', state.pageSize);
+        const data = await fetchJSON(API_BASE + '/records?' + p.toString());
+        state.totalLogs = data.total;
+        state.logsData = data.records || [];
+
+        document.getElementById('logPaginationInfo').textContent =
+          `第 ${data.page} 页，共 ${data.total} 条`;
+
+        const tbody = document.getElementById('logsTableBody');
+        if (!data.records || data.records.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配日志记录</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.records.map((r, idx) => `
+          <tr>
+            <td>${new Date(r.requested_at).toLocaleTimeString()}</td>
+            <td>
+              ${r.failed
+                ? `<span class="badge badge-danger">失败 ${esc(r.failure_status_code) || ''}</span>`
+                : '<span class="badge badge-success">成功 200</span>'}
+            </td>
+            <td class="font-mono"><strong>${esc(r.model)}</strong></td>
+            <td><span class="badge badge-neutral">${esc(r.provider)}</span></td>
+            <td class="font-mono" style="color:var(--text-secondary);">${esc(r.auth_id) || '—'}</td>
+            <td class="font-mono">${r.api_key ? esc(r.api_key.substring(0, 16)) + '...' : '—'}</td>
+            <td class="num font-mono">${formatNumber(r.total_tokens)}</td>
+            <td class="num font-mono text-emerald">${formatCost(r.total_cost)}</td>
+            <td class="num font-mono">${r.latency_ms} ms</td>
+            <td style="text-align: center;">
+              <button class="action-btn" style="padding: 2px 7px; font-size: 11.5px;" onclick="showDetail(${idx})">详情</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('load logs failed:', err);
+      }
+    }
+
+    window.showDetail = function(idx) {
+      const r = state.logsData[idx];
+      if (!r) return;
+
+      document.getElementById('modalTitle').textContent = `请求明细 #${r.id} · ${r.model}`;
+      const grid = document.getElementById('modalGrid');
+      grid.innerHTML = `
+        <div class="grid-cell"><div class="cell-label">模型</div><div class="cell-value font-mono">${esc(r.model)}</div></div>
+        <div class="grid-cell"><div class="cell-label">AI 提供商</div><div class="cell-value">${esc(r.provider)} (${esc(r.auth_type) || 'default'})</div></div>
+        <div class="grid-cell"><div class="cell-label">认证文件 / ID</div><div class="cell-value font-mono">${esc(r.auth_id) || '—'}</div></div>
+        <div class="grid-cell"><div class="cell-label">客户端 Key</div><div class="cell-value font-mono">${esc(r.api_key) || '—'}</div></div>
+        <div class="grid-cell"><div class="cell-label">请求时间</div><div class="cell-value">${new Date(r.requested_at).toLocaleString()}</div></div>
+        <div class="grid-cell"><div class="cell-label">响应延迟 / TTFT</div><div class="cell-value font-mono">${r.latency_ms} ms / TTFT: ${r.ttft_ms} ms</div></div>
+        <div class="grid-cell"><div class="cell-label">输入 Tokens</div><div class="cell-value font-mono">${r.input_tokens.toLocaleString()}</div></div>
+        <div class="grid-cell"><div class="cell-label">输出 Tokens</div><div class="cell-value font-mono">${r.output_tokens.toLocaleString()} (Reasoning: ${r.reasoning_tokens})</div></div>
+        <div class="grid-cell"><div class="cell-label">缓存命中</div><div class="cell-value font-mono" style="color:var(--warning-color);">${r.cache_read_tokens.toLocaleString()} (写入: ${r.cache_creation_tokens})</div></div>
+        <div class="grid-cell"><div class="cell-label">预估费用</div><div class="cell-value font-mono text-emerald"><strong>${formatCost(r.total_cost)}</strong></div></div>
+      `;
+
+      const errSec = document.getElementById('modalErrorSection');
+      if (r.failed) {
+        errSec.style.display = 'block';
+        document.getElementById('modalErrorBody').textContent =
+          `HTTP ${r.failure_status_code}\n${r.failure_body || '无详细错误响应'}`;
+      } else {
+        errSec.style.display = 'none';
+      }
+
+      document.getElementById('detailModal').classList.add('active');
+    };
+
+    document.getElementById('modalClose').addEventListener('click', () => {
+      document.getElementById('detailModal').classList.remove('active');
+    });
+
+    document.getElementById('btnPrevPage').addEventListener('click', () => {
+      if (state.page > 1) {
+        state.page--;
+        loadLogs();
+      }
+    });
+    document.getElementById('btnNextPage').addEventListener('click', () => {
+      if (state.page * state.pageSize < state.totalLogs) {
+        state.page++;
+        loadLogs();
+      }
+    });
+
+    // Tooltip Helpers
+    const tooltipEl = document.getElementById("chartTooltip");
+    function showTooltip(clientX, clientY, html) {
+      if (!tooltipEl) return;
+      tooltipEl.innerHTML = html;
+      tooltipEl.style.left = clientX + "px";
+      tooltipEl.style.top = clientY + "px";
+      tooltipEl.style.display = "block";
+    }
+    function hideTooltip() {
+      if (!tooltipEl) return;
+      tooltipEl.style.display = "none";
+    }
+
+    // 1. Dual-Axis Line + Bar Chart with Interactive Hover
+    function renderTrendChart(points) {
+      const canvas = document.getElementById("trendChart");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const w = canvas.parentElement.clientWidth;
+      const h = canvas.parentElement.clientHeight;
+      canvas.width = w * window.devicePixelRatio;
+      canvas.height = h * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const textColor = isDark ? "#9c958d" : "#8b8680";
+      const gridColor = isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.06)";
+      const barColor = isDark ? "rgba(156, 149, 141, 0.35)" : "rgba(139, 134, 128, 0.25)";
+      const barHoverColor = isDark ? "rgba(156, 149, 141, 0.65)" : "rgba(139, 134, 128, 0.5)";
+      const lineColor = "#10b981";
+
+      const padding = { top: 20, right: 40, bottom: 30, left: 45 };
+      const chartW = w - padding.left - padding.right;
+      const chartH = h - padding.top - padding.bottom;
+
+      if (!points || points.length === 0) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.strokeStyle = gridColor;
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 3; i++) {
+          const y = padding.top + (chartH / 3) * i;
+          ctx.beginPath();
+          ctx.moveTo(padding.left, y);
+          ctx.lineTo(w - padding.right, y);
+          ctx.stroke();
+        }
+        ctx.fillStyle = textColor;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("暂无走势数据 (等待网关请求流入)", w / 2, h / 2);
+        canvas.onmousemove = null;
+        canvas.onmouseleave = null;
+        return;
+      }
+
+      const maxReq = Math.max(...points.map(p => p.requests), 5);
+      const maxCost = Math.max(...points.map(p => p.total_cost), 0.01);
+
+      function draw(hoveredIdx) {
+        ctx.clearRect(0, 0, w, h);
+
+        ctx.strokeStyle = gridColor;
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 4; i++) {
+          const y = padding.top + (chartH / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(padding.left, y);
+          ctx.lineTo(w - padding.right, y);
+          ctx.stroke();
+
+          const reqVal = Math.round(maxReq - (maxReq / 4) * i);
+          ctx.fillStyle = textColor;
+          ctx.font = "10px var(--font-mono)";
+          ctx.textAlign = "right";
+          ctx.fillText(reqVal, padding.left - 6, y + 3);
+
+          const costVal = "$" + (maxCost - (maxCost / 4) * i).toFixed(2);
+          ctx.textAlign = "left";
+          ctx.fillText(costVal, w - padding.right + 6, y + 3);
+        }
+
+        const barW = Math.max(chartW / points.length - 4, 3);
+        points.forEach((p, idx) => {
+          const x = padding.left + (idx / points.length) * chartW + 2;
+          const barH = (p.requests / maxReq) * chartH;
+          const y = padding.top + chartH - barH;
+
+          ctx.fillStyle = (idx === hoveredIdx) ? barHoverColor : barColor;
+          ctx.fillRect(x, y, barW, barH);
+        });
+
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        points.forEach((p, idx) => {
+          const x = padding.left + (idx / points.length) * chartW + barW / 2;
+          const y = padding.top + chartH - (p.total_cost / maxCost) * chartH;
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        points.forEach((p, idx) => {
+          if (p.total_cost <= 0) return;
+          const x = padding.left + (idx / points.length) * chartW + barW / 2;
+          const y = padding.top + chartH - (p.total_cost / maxCost) * chartH;
+          ctx.fillStyle = lineColor;
+          ctx.beginPath();
+          ctx.arc(x, y, (idx === hoveredIdx) ? 5 : 3, 0, 2 * Math.PI);
+          ctx.fill();
+        });
+      }
+
+      draw(-1);
+
+      canvas.onmousemove = function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        if (mouseX >= padding.left && mouseX <= w - padding.right) {
+          const idx = Math.floor((mouseX - padding.left) / (chartW / points.length));
+          if (idx >= 0 && idx < points.length) {
+            const p = points[idx];
+            canvas.style.cursor = "pointer";
+            showTooltip(e.clientX, e.clientY, `
+              <div class="tooltip-header">${p.timestamp}</div>
+              <div class="tooltip-row"><span>调用次数:</span> <span class="tooltip-val">${p.requests.toLocaleString()} 次</span></div>
+              <div class="tooltip-row"><span>预估费用:</span> <span class="tooltip-val text-emerald">${formatCost(p.total_cost)}</span></div>
+              <div class="tooltip-row"><span>Token 总量:</span> <span class="tooltip-val">${formatNumber(p.total_tokens)}</span></div>
+              <div class="tooltip-row"><span>平均延迟:</span> <span class="tooltip-val">${p.avg_latency_ms.toFixed(0)} ms</span></div>
+            `);
+            draw(idx);
+            return;
+          }
+        }
+        canvas.style.cursor = "default";
+        hideTooltip();
+        draw(-1);
+      };
+
+      canvas.onmouseleave = function() {
+        canvas.style.cursor = "default";
+        hideTooltip();
+        draw(-1);
+      };
+    }
+
+    // 2. Token Breakdown Doughnut Chart with Interactive Slice Hover
+    function renderTokenDoughnut(summary) {
+      const canvas = document.getElementById("tokenDoughnut");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const w = canvas.parentElement.clientWidth;
+      const h = canvas.parentElement.clientHeight;
+      canvas.width = w * window.devicePixelRatio;
+      canvas.height = h * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const textColor = isDark ? "#9c958d" : "#8b8680";
+      const isWhite = document.documentElement.getAttribute("data-theme") === "white";
+      const holeBg = isDark ? "#151412" : "#ffffff";
+
+      const rawItems = [
+        { label: "输入 Tokens", val: summary.input_tokens || 0, color: "#8b8680" },
+        { label: "输出 Tokens", val: summary.output_tokens || 0, color: "#10b981" },
+        { label: "缓存读取 (Hit)", val: summary.cache_read_tokens || 0, color: isDark ? "#ffd862" : "#e0aa14" },
+        { label: "缓存写入 (Write)", val: summary.cache_creation_tokens || 0, color: "#c65746" }
+      ];
+
+      const total = rawItems.reduce((sum, item) => sum + item.val, 0);
+      if (total === 0) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = textColor;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("暂无 Token 消耗数据", w / 2, h / 2);
+        canvas.onmousemove = null;
+        canvas.onmouseleave = null;
+        return;
+      }
+
+      const centerX = w / 2;
+      const centerY = h / 2 - 20;
+      const baseRadius = Math.min(centerX, centerY) - 20;
+
+      let startAngle = -Math.PI / 2;
+      const slices = [];
+      rawItems.forEach(item => {
+        if (item.val <= 0) return;
+        const sliceAngle = (item.val / total) * 2 * Math.PI;
+        slices.push({
+          item: item,
+          startAngle: startAngle,
+          endAngle: startAngle + sliceAngle,
+          color: item.color,
+          pct: ((item.val / total) * 100).toFixed(1)
+        });
+        startAngle += sliceAngle;
+      });
+
+      function draw(hoveredSlice) {
+        ctx.clearRect(0, 0, w, h);
+
+        slices.forEach(s => {
+          const isHovered = (s === hoveredSlice);
+          const r = isHovered ? baseRadius + 6 : baseRadius;
+
+          ctx.save();
+          if (isHovered) {
+            ctx.shadowColor = "rgba(0,0,0,0.25)";
+            ctx.shadowBlur = 10;
+          }
+          ctx.fillStyle = s.color;
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY);
+          ctx.arc(centerX, centerY, r, s.startAngle, s.endAngle);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Cut doughnut hole
+        ctx.fillStyle = holeBg;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, baseRadius * 0.58, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Center Text
+        ctx.fillStyle = textColor;
+        ctx.font = "10px var(--font-mono)";
+        ctx.textAlign = "center";
+        ctx.fillText("总计消耗", centerX, centerY - 6);
+        ctx.fillStyle = isDark ? "#f6f4f1" : "#2d2a26";
+        ctx.font = "bold 13px var(--font-mono)";
+        ctx.fillText(formatNumber(total), centerX, centerY + 12);
+
+        // Legend
+        let legY = h - 35;
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "left";
+        rawItems.forEach((item, idx) => {
+          const legX = 14 + (idx % 2) * (w / 2);
+          const yPos = legY + Math.floor(idx / 2) * 16;
+          ctx.fillStyle = item.color;
+          ctx.fillRect(legX, yPos - 8, 8, 8);
+          ctx.fillStyle = textColor;
+          ctx.fillText(`${item.label}: ${formatNumber(item.val)}`, legX + 14, yPos);
+        });
+      }
+
+      draw(null);
+
+      canvas.onmousemove = function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const dx = mouseX - centerX;
+        const dy = mouseY - centerY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist >= baseRadius * 0.5 && dist <= baseRadius + 12) {
+          let angle = Math.atan2(dy, dx);
+          let norm = angle - (-Math.PI / 2);
+          while (norm < 0) norm += 2 * Math.PI;
+          while (norm >= 2 * Math.PI) norm -= 2 * Math.PI;
+
+          const hit = slices.find(s => {
+            let sNorm = s.startAngle - (-Math.PI / 2);
+            while (sNorm < 0) sNorm += 2 * Math.PI;
+            let eNorm = s.endAngle - (-Math.PI / 2);
+            while (eNorm <= 0) eNorm += 2 * Math.PI;
+            return norm >= sNorm && norm <= eNorm;
+          });
+
+          if (hit) {
+            canvas.style.cursor = "pointer";
+            showTooltip(e.clientX, e.clientY, `
+              <div class="tooltip-header"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${hit.color}"></span> ${hit.item.label}</div>
+              <div class="tooltip-row"><span>Token 数量:</span> <span class="tooltip-val">${hit.item.val.toLocaleString()}</span></div>
+              <div class="tooltip-row"><span>切片占比:</span> <span class="tooltip-val">${hit.pct}%</span></div>
+            `);
+            draw(hit);
+            return;
+          }
+        }
+        canvas.style.cursor = "default";
+        hideTooltip();
+        draw(null);
+      };
+
+      canvas.onmouseleave = function() {
+        canvas.style.cursor = "default";
+        hideTooltip();
+        draw(null);
+      };
+    }
+
+    // 3. Model Cost Share Pie/Doughnut Chart with Interactive Slice Hover
+    function renderModelPie(models) {
+      const canvas = document.getElementById("modelPieChart");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      const w = canvas.parentElement.clientWidth;
+      const h = canvas.parentElement.clientHeight;
+      canvas.width = w * window.devicePixelRatio;
+      canvas.height = h * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const textColor = isDark ? "#9c958d" : "#8b8680";
+      const holeBg = isDark ? "#151412" : "#ffffff";
+
+      const palette = ["#10b981", "#3b82f6", "#8b5cf6", "#e0aa14", "#06b6d4", "#c65746", "#f59e0b"];
+
+      const totalCost = models.reduce((sum, m) => sum + (m.total_cost || 0), 0);
+      if (!models || models.length === 0 || totalCost === 0) {
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = textColor;
+        ctx.font = "12px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("暂无模型费用数据", w / 2, h / 2);
+        canvas.onmousemove = null;
+        canvas.onmouseleave = null;
+        return;
+      }
+
+      const topModels = models.slice(0, 5);
+      const otherCost = models.slice(5).reduce((sum, m) => sum + (m.total_cost || 0), 0);
+      if (otherCost > 0) {
+        topModels.push({ model: "其他模型", total_cost: otherCost });
+      }
+
+      const centerX = w / 2;
+      const centerY = h / 2 - 25;
+      const baseRadius = Math.min(centerX, centerY) - 20;
+
+      let startAngle = -Math.PI / 2;
+      const slices = [];
+      topModels.forEach((item, idx) => {
+        const sliceAngle = (item.total_cost / totalCost) * 2 * Math.PI;
+        slices.push({
+          item: item,
+          startAngle: startAngle,
+          endAngle: startAngle + sliceAngle,
+          color: palette[idx % palette.length],
+          pct: ((item.total_cost / totalCost) * 100).toFixed(1)
+        });
+        startAngle += sliceAngle;
+      });
+
+      function draw(hoveredSlice) {
+        ctx.clearRect(0, 0, w, h);
+
+        slices.forEach(s => {
+          const isHovered = (s === hoveredSlice);
+          const r = isHovered ? baseRadius + 6 : baseRadius;
+
+          ctx.save();
+          if (isHovered) {
+            ctx.shadowColor = "rgba(0,0,0,0.25)";
+            ctx.shadowBlur = 10;
+          }
+          ctx.fillStyle = s.color;
+          ctx.beginPath();
+          ctx.moveTo(centerX, centerY);
+          ctx.arc(centerX, centerY, r, s.startAngle, s.endAngle);
+          ctx.closePath();
+          ctx.fill();
+          ctx.restore();
+        });
+
+        // Cut inner hole
+        ctx.fillStyle = holeBg;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, baseRadius * 0.58, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Center Text
+        ctx.fillStyle = textColor;
+        ctx.font = "10px var(--font-mono)";
+        ctx.textAlign = "center";
+        ctx.fillText("总计费用", centerX, centerY - 6);
+        ctx.fillStyle = isDark ? "#f6f4f1" : "#2d2a26";
+        ctx.font = "bold 13px var(--font-mono)";
+        ctx.fillText(formatCost(totalCost), centerX, centerY + 12);
+
+        // Legend
+        let legY = h - 45;
+        ctx.font = "11px sans-serif";
+        ctx.textAlign = "left";
+        topModels.forEach((item, idx) => {
+          const legX = 14 + (idx % 2) * (w / 2);
+          const yPos = legY + Math.floor(idx / 2) * 16;
+          ctx.fillStyle = palette[idx % palette.length];
+          ctx.fillRect(legX, yPos - 8, 8, 8);
+          ctx.fillStyle = textColor;
+          const pct = ((item.total_cost / totalCost) * 100).toFixed(0);
+          ctx.fillText(`${item.model}: ${pct}% (${formatCost(item.total_cost)})`, legX + 14, yPos);
+        });
+      }
+
+      draw(null);
+
+      canvas.onmousemove = function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const dx = mouseX - centerX;
+        const dy = mouseY - centerY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist >= baseRadius * 0.5 && dist <= baseRadius + 12) {
+          let angle = Math.atan2(dy, dx);
+          let norm = angle - (-Math.PI / 2);
+          while (norm < 0) norm += 2 * Math.PI;
+          while (norm >= 2 * Math.PI) norm -= 2 * Math.PI;
+
+          const hit = slices.find(s => {
+            let sNorm = s.startAngle - (-Math.PI / 2);
+            while (sNorm < 0) sNorm += 2 * Math.PI;
+            let eNorm = s.endAngle - (-Math.PI / 2);
+            while (eNorm <= 0) eNorm += 2 * Math.PI;
+            return norm >= sNorm && norm <= eNorm;
+          });
+
+          if (hit) {
+            canvas.style.cursor = "pointer";
+            showTooltip(e.clientX, e.clientY, `
+              <div class="tooltip-header"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${hit.color}"></span> ${hit.item.model}</div>
+              <div class="tooltip-row"><span>总费用:</span> <span class="tooltip-val text-emerald">${formatCost(hit.item.total_cost)}</span></div>
+              <div class="tooltip-row"><span>费用占比:</span> <span class="tooltip-val">${hit.pct}%</span></div>
+              ${hit.item.requests ? `<div class="tooltip-row"><span>调用次数:</span> <span class="tooltip-val">${hit.item.requests.toLocaleString()} 次</span></div>` : ""}
+              <div style="margin-top:6px;padding-top:4px;border-top:1px dashed var(--border-color);font-size:10.5px;color:var(--success-color);">点击切片可一键下钻此模型</div>
+            `);
+            draw(hit);
+            return;
+          }
+        }
+        canvas.style.cursor = "default";
+        hideTooltip();
+        draw(null);
+      };
+
+      canvas.onclick = function(e) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const dx = mouseX - centerX;
+        const dy = mouseY - centerY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist >= baseRadius * 0.5 && dist <= baseRadius + 12) {
+          let angle = Math.atan2(dy, dx);
+          let norm = angle - (-Math.PI / 2);
+          while (norm < 0) norm += 2 * Math.PI;
+          while (norm >= 2 * Math.PI) norm -= 2 * Math.PI;
+
+          const hit = slices.find(s => {
+            let sNorm = s.startAngle - (-Math.PI / 2);
+            while (sNorm < 0) sNorm += 2 * Math.PI;
+            let eNorm = s.endAngle - (-Math.PI / 2);
+            while (eNorm <= 0) eNorm += 2 * Math.PI;
+            return norm >= sNorm && norm <= eNorm;
+          });
+
+          if (hit && hit.item && hit.item.model && hit.item.model !== '其他模型') {
+            focusModel(hit.item.model);
+            hideTooltip();
+          }
+        } else if (dist < baseRadius * 0.5 && state.filterModel) {
+          state.filterModel = '';
+          syncDropdownsFromState();
+          updateActiveFilterChips();
+          loadActiveTabData();
+          hideTooltip();
+        }
+      };
+
+      canvas.onmouseleave = function() {
+        canvas.style.cursor = "default";
+        hideTooltip();
+        draw(null);
+      };
+    }
+
+    // 4. Interactive Horizontal Bar Rankings (Models or Accounts)
+    let rankingMode = 'models';
+
+    window.switchRankingMode = function(mode) {
+      rankingMode = mode;
+      document.getElementById('rankTabModels')?.classList.toggle('active', mode === 'models');
+      document.getElementById('rankTabAuths')?.classList.toggle('active', mode === 'auths');
+      renderRankings();
+    };
+
+    function renderRankings() {
+      const container = document.getElementById('modelRankingList');
+      if (!container) return;
+
+      if (rankingMode === 'models') {
+        const models = state.modelsData || [];
+        if (!models || models.length === 0) {
+          container.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 40px 0; font-size: 13px;">暂无模型调用数据</div>';
+          return;
+        }
+
+        const top = [...models].sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0)).slice(0, 5);
+        const maxSpend = Math.max(...top.map(m => m.total_cost), 0.001);
+
+        container.innerHTML = top.map(m => {
+          const pct = Math.min(Math.max((m.total_cost / maxSpend) * 100, 4), 100);
+          return `
+            <div class="bar-ranking-item" style="cursor: pointer;" onclick="focusModel(${jsArg(m.model)})" title="点击下钻此模型">
+              <div class="bar-item-header">
+                <span class="bar-item-name">${esc(m.model)} <span style="font-size:11px;color:var(--text-tertiary);font-weight:normal;">→</span></span>
+                <span class="bar-item-val">${formatCost(m.total_cost)} · ${m.requests.toLocaleString()} 次</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" style="width: ${pct}%;"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        const auths = state.authsData || [];
+        if (!auths || auths.length === 0) {
+          container.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 40px 0; font-size: 13px;">暂无账号调用数据</div>';
+          return;
+        }
+
+        const top = [...auths].sort((a, b) => (b.total_cost || 0) - (a.total_cost || 0)).slice(0, 5);
+        const maxSpend = Math.max(...top.map(a => a.total_cost), 0.001);
+
+        container.innerHTML = top.map(a => {
+          const pct = Math.min(Math.max((a.total_cost / maxSpend) * 100, 4), 100);
+          return `
+            <div class="bar-ranking-item" style="cursor: pointer;" onclick="focusAuth(${jsArg(a.auth_id)})" title="点击下钻此账号分析">
+              <div class="bar-item-header">
+                <span class="bar-item-name">${esc(a.auth_id)} <span style="font-size:11px;color:var(--text-tertiary);font-weight:normal;">(${esc(a.provider)}) →</span></span>
+                <span class="bar-item-val">${formatCost(a.total_cost)} · ${a.requests.toLocaleString()} 次</span>
+              </div>
+              <div class="bar-track">
+                <div class="bar-fill" style="width: ${pct}%; background: var(--success-color);"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    function renderModelRankings(models) {
+      renderRankings();
+    }
+
+    function loadActiveTabData() {
+      if (state.activeTab === 'tab-overview') {
+        loadSummary();
+        loadTimeSeries();
+        loadModels();
+        // Also fetch auths for ranking tab
+        fetchJSON(API_BASE + '/auths?' + getFilterParams().toString()).then(data => {
+          state.authsData = data || [];
+          if (rankingMode === 'auths') renderRankings();
+        }).catch(() => {});
+      } else if (state.activeTab === 'tab-models') {
+        loadModels();
+      } else if (state.activeTab === 'tab-providers') {
+        loadProviders();
+      } else if (state.activeTab === 'tab-auths') {
+        loadAuths();
+      } else if (state.activeTab === 'tab-keys') {
+        loadAPIKeys();
+      } else if (state.activeTab === 'tab-logs') {
+        loadLogs();
+      }
+    }
+
+    document.getElementById('btnRefresh').addEventListener('click', () => {
+      loadActiveTabData();
+    });
+
+    document.getElementById('btnExport').addEventListener('click', async () => {
+      try {
+        const p = getFilterParams();
+        p.set('page', 1);
+        p.set('page_size', 1000);
+        const data = await fetchJSON(API_BASE + '/records?' + p.toString());
+        if (!data.records || data.records.length === 0) {
+          alert('当前筛选条件下暂无日志可导出');
+          return;
+        }
+
+        const headers = ['ID', 'RequestedAt', 'Status', 'Model', 'Provider', 'AuthID', 'APIKey', 'InputTokens', 'OutputTokens', 'CacheReadTokens', 'TotalTokens', 'TotalCost', 'LatencyMs'];
+        const rows = data.records.map(r => [
+          r.id,
+          r.requested_at,
+          r.failed ? 'FAILED' : 'SUCCESS',
+          r.model,
+          r.provider,
+          r.auth_id,
+          r.api_key,
+          r.input_tokens,
+          r.output_tokens,
+          r.cache_read_tokens,
+          r.total_tokens,
+          r.total_cost,
+          r.latency_ms
+        ]);
+
+        // RFC 4180 quoting, plus a leading apostrophe on values a spreadsheet
+        // would otherwise evaluate as a formula.
+        const csvCell = v => {
+          let t = (v === null || v === undefined) ? '' : String(v);
+          if (/^[=+\-@\t\r]/.test(t)) t = "'" + t;
+          return '"' + t.replace(/"/g, '""') + '"';
+        };
+
+        const csvContent = '\uFEFF' + [
+          headers.map(csvCell).join(','),
+          ...rows.map(e => e.map(csvCell).join(','))
+        ].join('\r\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', objectUrl);
+        link.setAttribute('download', `cpa_usage_${new Date().toISOString().slice(0,10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        alert('导出失败: ' + err.message);
+      }
+    });
+
+    // Cleanup Modal logic
+    const cleanupModal = document.getElementById('cleanupModal');
+    document.getElementById('btnOpenCleanupModal').addEventListener('click', () => {
+      cleanupModal.classList.add('active');
+    });
+    document.getElementById('closeCleanupModal').addEventListener('click', () => {
+      cleanupModal.classList.remove('active');
+    });
+    document.getElementById('cancelCleanup').addEventListener('click', () => {
+      cleanupModal.classList.remove('active');
+    });
+
+    // Clean by specific Date
+    document.getElementById('btnCleanByDate').addEventListener('click', async () => {
+      const dateVal = document.getElementById('cleanupSpecificDate').value;
+      if (!dateVal) {
+        alert('请先选择具体日期！');
+        return;
+      }
+      if (!confirm(`确定删除 ${dateVal} 之前的所有使用量记录吗？`)) return;
+      try {
+        const res = await fetchJSON(API_BASE + '/cleanup?before=' + encodeURIComponent(dateVal));
+        alert(`清理完成: 成功删除 ${res.deleted_rows} 条历史记录！`);
+        cleanupModal.classList.remove('active');
+        loadActiveTabData();
+      } catch (err) {
+        alert('清理失败: ' + err.message);
+      }
+    });
+
+    // Clean by Days
+    document.getElementById('btnCleanByDays').addEventListener('click', async () => {
+      const days = document.getElementById('cleanupDaysInput').value || '90';
+      if (!confirm(`确定清理 ${days} 天前的历史记录吗？`)) return;
+      try {
+        const res = await fetchJSON(API_BASE + '/cleanup?days=' + encodeURIComponent(days));
+        alert(`清理完成: 成功删除 ${res.deleted_rows} 条历史记录！`);
+        cleanupModal.classList.remove('active');
+        loadActiveTabData();
+      } catch (err) {
+        alert('清理失败: ' + err.message);
+      }
+    });
+
+    // Clean All
+    document.getElementById('btnCleanAll').addEventListener('click', async () => {
+      if (!confirm('警告：此操作将永久清空数据库内全部使用量记录，确定继续吗？')) return;
+      try {
+        const res = await fetchJSON(API_BASE + '/cleanup?days=0');
+        alert(`清理完成: 成功删除 ${res.deleted_rows} 条历史记录，数据已归零！`);
+        cleanupModal.classList.remove('active');
+        loadActiveTabData();
+      } catch (err) {
+        alert('清空失败: ' + err.message);
+      }
+    });
+
+
+
+    window.addEventListener('DOMContentLoaded', () => {
+      initDropdowns();
+      loadFilterOptions();
+      loadActiveTabData();
+      state.timer = setInterval(loadActiveTabData, 15000);
+    });
+  </script>
+</body>
+</html>

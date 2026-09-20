@@ -1,0 +1,162 @@
+# cpa-usage
+
+CLIProxyAPI (CPA) 的使用量统计插件。以 C-ABI 动态库形式加载，记录经由 CPA 转发的每一次模型请求，估算费用，并提供一个内嵌的 Web 看板与一组 JSON 查询接口。
+
+## 功能范围
+
+- **用量采集**：订阅 CPA 的 `usage.handle` 事件，落库保存 provider、模型、客户端 API Key、上游凭证、会话 ID、延迟、TTFT、失败状态码与各类 token 计数。
+- **费用估算**：依据内置价格表估算每次请求的美元成本，区分 input / output / cache read / cache creation 四类计价。
+- **持久化**：使用纯 Go 的 SQLite 实现（`modernc.org/sqlite`），无需 CGO 以外的额外依赖。写入经由内存队列批量提交。
+- **查询接口**：按时间、模型、provider、API Key、凭证、成功/失败等维度聚合与分页查询。
+- **Web 看板**：单页面应用，HTML/CSS/JS 通过 `//go:embed` 内嵌在动态库中，不依赖外部 CDN。
+
+## 环境要求
+
+| 项目 | 要求 |
+|---|---|
+| Go | 1.26 或更高（见 `go.mod`） |
+| CGO | 必须启用，需要可用的 C 编译器（GCC / Clang / Zig CC） |
+| CLIProxyAPI | v7.3.9 或兼容版本，插件契约 schema version 6 |
+| 平台 | Windows / Linux / macOS |
+
+## 构建
+
+```bash
+CGO_ENABLED=1 go build -buildmode=c-shared -o cpa_usage.dll .    # Windows
+```
+
+```bash
+CGO_ENABLED=1 go build -buildmode=c-shared -o cpa_usage.so .     # Linux
+```
+
+```bash
+CGO_ENABLED=1 go build -buildmode=c-shared -o cpa_usage.dylib .  # macOS
+```
+
+或使用 `make build`，它会根据当前平台选择后缀。
+
+## 部署
+
+将产物复制到 CPA 的插件目录，文件名需与插件 ID 一致：
+
+```text
+CLIProxyAPI/
+├── config.yaml
+└── plugins/
+    └── cpa-usage.dll        # 或 cpa-usage.so / cpa-usage.dylib
+```
+
+在 CPA 的 `config.yaml` 中启用：
+
+```yaml
+plugins:
+  enabled: true
+  dir: "plugins"
+  configs:
+    cpa-usage:
+      enabled: true
+      db_path: "data/cpa_usage.db"
+      retention_days: 90
+```
+
+### 配置项
+
+| 字段 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `db_path` | string | `data/cpa_usage.db` | SQLite 数据库路径，相对于 CPA 的工作目录。父目录会自动创建。 |
+| `retention_days` | int | `90` | 保留天数。大于 0 时，插件在打开数据库后执行一次清理，删除早于该天数的记录；设为 0 表示不自动清理。 |
+
+`scripts/setup.sh` 与 `scripts/setup.bat` 封装了"复制动态库 + 打补丁"的步骤，假定 `CLIProxyAPI` 与本仓库位于同级目录。
+
+## 访问看板
+
+插件通过 `management.register` 注册资源路由，看板可直接访问：
+
+```text
+http://<cpa-host>:<port>/v0/resource/plugins/cpa-usage/dashboard
+```
+
+`scripts/patch_observe.py` 可选地把看板入口注入到 CPA 官方控制面板的侧边栏"观测"分组中：
+
+```bash
+python scripts/patch_observe.py            # 修改本地 management.html
+python scripts/patch_observe.py --fetch    # 本地不存在时先下载再修改
+python scripts/patch_observe.py --restore  # 从 .bak 还原
+```
+
+该脚本通过字符串匹配修改压缩后的 `management.html`，匹配模式与特定构建版本绑定。CPA 升级控制面板后模式可能失效，此时脚本会跳过对应步骤并打印提示，需要重新适配。它还会无条件开启面板的插件路由开关。若不希望修改官方面板文件，可跳过此步骤，直接使用上面的 URL。
+
+## HTTP 接口
+
+插件注册两组路由，指向同一套处理逻辑：
+
+- **Management 路由**，前缀 `/v0/management/usage/`，经过 CPA 的管理认证。
+- **资源路由**，前缀 `/v0/resource/plugins/cpa-usage/api/`，**不经过认证**，且宿主只放行 GET。看板自身的数据请求走这一组。
+
+| 端点 | Management 方法 | 说明 |
+|---|---|---|
+| `summary` | GET | 全局汇总：请求数、成功/失败数、各类 token、总费用、平均延迟 |
+| `timeseries` | GET | 按时间分桶的趋势数据，`interval` 取 `minute` / `hour` / `day`（默认 `hour`） |
+| `models` | GET | 按模型聚合 |
+| `keys` | GET | 按客户端 API Key 聚合 |
+| `auths` | GET | 按上游凭证聚合 |
+| `records` | GET | 分页明细，`page`（默认 1）、`page_size`（默认 20，上限 100） |
+| `filter-options` | GET | 各维度的去重候选值 |
+| `cleanup` | POST | 删除历史记录，`days`（默认 90）或 `before`（时间戳 / RFC3339 / `YYYY-MM-DD`）；`days=0` 或 `days=all` 清空全部 |
+| `ping` | GET | 健康检查 |
+
+例如汇总数据的两个入口分别是 `/v0/management/usage/summary` 与 `/v0/resource/plugins/cpa-usage/api/summary`。处理器对 `cleanup` 同时接受 GET、POST 和 DELETE，因此它在资源路由下也可通过 GET 触发——参见下一节。
+
+通用查询参数：`start_time`、`end_time`、`model`、`provider`、`api_key`、`auth_id`、`failed`、`search`。时间参数接受 Unix 秒/毫秒时间戳、RFC3339 或 `YYYY-MM-DD`。所有时间在服务端按 UTC 存储与分桶。
+
+## 安全注意事项
+
+**资源路由不经过管理认证。** 这是 CPA 插件宿主的设计：`/v0/resource/plugins/<id>/` 下的 GET 请求不走 management 中间件（见上游 `internal/api/server_management.go` 的 `pluginResourceNoRoute`）。本插件把看板及其全部数据接口都注册为资源路由，因此在当前实现下：
+
+- 任何能访问 CPA 监听端口的客户端都可以读取 `/v0/resource/plugins/cpa-usage/api/records`，其中包含**明文的客户端 API Key**、上游凭证 ID、会话 ID 以及上游返回的错误响应体。
+- `/v0/resource/plugins/cpa-usage/api/cleanup?days=0` 是一个 GET 请求，可以在无认证的情况下清空整个用量数据库。
+
+在把 CPA 暴露到可信网络之外时，请自行在反向代理层对 `/v0/resource/plugins/cpa-usage/` 加认证或限制来源，或移除 `plugin.go` 中 `RegisterManagement` 的资源路由声明、改为仅使用 management 路由。
+
+数据库文件未加密，其内容应按凭证材料的级别保护。
+
+## 费用估算的准确性
+
+看板中的金额是**估算值，不是账单**，与供应商实际计费存在偏差。已知的偏差来源：
+
+- 价格表来自 LiteLLM 的 `model_prices_and_context_window.json` 快照，内嵌在二进制中，不会自动更新。供应商调价后需要重新构建。
+- 模型名采用多级模糊匹配（精确匹配 → 前缀清洗 → 系列匹配 → 子串匹配）。未收录的模型会落到同系列的近似价格上，匹配结果记录在 `matched_model` 字段中，可据此核对。
+- 完全无法匹配的模型记为 0 成本，而非报错。
+- 输入 token 按 `input − cache_read − cache_creation` 折算为新鲜输入。若上游的 token 口径与此不同，结果会偏差。
+- 价格表未给出缓存价时按启发式推导：缓存读取取输入价的 50%，Claude 系列的缓存写入取输入价的 1.25 倍。
+- DeepSeek 使用内置的峰谷逻辑（北京时间工作日 09:00–12:00 与 14:00–18:00 按 2.0 倍计），它是一个近似，并不等同于 DeepSeek 官方公布的错峰折扣规则。
+- 不计入图片、音频、Web 搜索等按次计费项。
+
+## 数据与保留
+
+记录写入单表 `usage_records`，在 `requested_at_unix`、`model`、`api_key`、`auth_id`、`provider`、`failed` 上建有索引。数据库以 WAL 模式打开，`busy_timeout` 为 5000ms。
+
+写入路径为：`usage.handle` 回调将记录投入容量 5000 的内存队列后立即返回；后台 worker 按 100 条或 250ms 的阈值批量提交。队列满时退化为单条直接写入。**进程非正常退出时，队列中尚未落盘的记录会丢失**；正常 `plugin.shutdown` 会先排空队列再关闭数据库。
+
+`retention_days` 的清理只在数据库打开时执行一次，不是常驻的定时任务。长期运行的实例需要通过 `/cleanup` 接口或重启来触发清理。删除后不会执行 `VACUUM`，文件大小不会立即回落。
+
+## 测试
+
+```bash
+go test ./...
+```
+
+`integration_test.go` 带有 `//go:build windows` 约束，会加载已编译的 `cpa_usage.dll` 并通过 C-ABI 调用 `plugin.register`、`usage.handle`、`management.register`、`management.handle`。未找到 DLL 时该测试自动跳过。
+
+## 已知限制
+
+- `plugin.reconfigure` 仅在存储尚未初始化时才会应用 `db_path`。运行中修改该配置需要重启 CPA 才能生效。
+- 路由匹配基于路径后缀，不是精确匹配。
+- 看板界面为简体中文，未做国际化。
+- 时间序列按 UTC 分桶，前端不做时区换算。
+
+## 许可
+
+MIT License。
+
+`pricing/prices.json` 源自 [LiteLLM](https://github.com/BerriAI/litellm) 的 `model_prices_and_context_window.json`（MIT License）。

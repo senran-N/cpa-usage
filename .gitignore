@@ -1,0 +1,17 @@
+# Compiled binaries and libraries
+*.dll
+*.so
+*.dylib
+*.exe
+cpa_usage.h
+
+# SQLite database and runtime state
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Temporary files and logs
+*.tmp
+*.bak
+*.log
