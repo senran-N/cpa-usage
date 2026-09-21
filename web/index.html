@@ -849,7 +849,7 @@
     <header class="header-row">
       <div class="header-copy">
         <h1 class="page-title">使用量与计费</h1>
-        <p class="header-desc">实时模型调用审计、Token 吞吐分布与美刀成本核算</p>
+        <p class="header-desc">实时模型调用审计、Token 吞吐分布与成本核算</p>
       </div>
       <div class="header-actions">
         <div class="segmented-control" id="rangeControl">
@@ -899,7 +899,7 @@
         <div class="stat-hint"><span id="kpi-tokens-in">输入 0</span> · <span id="kpi-tokens-out">输出 0</span></div>
       </div>
       <div class="stat-tile" style="--tile-accent: var(--warning-color);">
-        <span class="stat-label">缓存读取命中 (Hit)</span>
+        <span class="stat-label">缓存读取命中</span>
         <div class="stat-value" id="kpi-cache-read">0</div>
         <div class="stat-hint"><span id="kpi-cache-creation">缓存写入 0 Tokens</span></div>
       </div>
@@ -910,7 +910,7 @@
       <button class="tab-item active" data-tab="tab-overview">概览走势</button>
       <button class="tab-item" data-tab="tab-models">模型透视</button>
       <button class="tab-item" data-tab="tab-providers">AI 提供商</button>
-      <button class="tab-item" data-tab="tab-auths">认证文件 (账号)</button>
+      <button class="tab-item" data-tab="tab-auths">认证文件</button>
       <button class="tab-item" data-tab="tab-keys">客户端 Key</button>
       <button class="tab-item" data-tab="tab-logs">调用日志</button>
     </div>
@@ -938,10 +938,10 @@
         <!-- Chart 1: Line + Bar Chart -->
         <div class="chart-box">
           <div class="chart-header">
-            <span class="chart-title" id="trendChartTitle">请求量与美刀费用时序走势 (柱状图 + 折线图)</span>
+            <span class="chart-title" id="trendChartTitle">请求量与费用走势</span>
             <div class="chart-legend">
-              <div class="legend-item"><div class="legend-dot" style="background: var(--primary-color);"></div>请求量 (柱)</div>
-              <div class="legend-item"><div class="legend-dot" style="background: var(--success-color);"></div>费用 $ (线)</div>
+              <div class="legend-item"><div class="legend-dot" style="background: var(--primary-color);"></div>请求量</div>
+              <div class="legend-item"><div class="legend-dot" style="background: var(--success-color);"></div>费用 (USD)</div>
             </div>
           </div>
           <div class="canvas-wrap">
@@ -952,7 +952,7 @@
         <!-- Chart 2: Token Breakdown Doughnut Chart -->
         <div class="chart-box">
           <div class="chart-header">
-            <span class="chart-title">Token 构成与缓存命中分析 (饼状 / 环形图)</span>
+            <span class="chart-title">Token 构成与缓存命中分析</span>
           </div>
           <div class="canvas-wrap">
             <canvas id="tokenDoughnut"></canvas>
@@ -964,7 +964,7 @@
         <!-- Chart 3: Model Cost Share Doughnut Chart -->
         <div class="chart-box">
           <div class="chart-header">
-            <span class="chart-title" id="modelPieTitle">各模型费用占比 (饼状图)</span>
+            <span class="chart-title" id="modelPieTitle">各模型费用占比</span>
           </div>
           <div class="canvas-wrap">
             <canvas id="modelPieChart"></canvas>
@@ -974,10 +974,10 @@
         <!-- Chart 4: Top Models / Accounts Horizontal Bar Ranking -->
         <div class="chart-box">
           <div class="chart-header">
-            <span class="chart-title" id="modelRankingTitle">消耗排行 (横向柱状图)</span>
+            <span class="chart-title" id="modelRankingTitle">消耗排行</span>
             <div class="segmented-control" style="padding: 1px;">
               <button type="button" class="segment-btn active" id="rankTabModels" onclick="switchRankingMode('models')" style="padding: 2px 8px; font-size: 11px;">按模型</button>
-              <button type="button" class="segment-btn" id="rankTabAuths" onclick="switchRankingMode('auths')" style="padding: 2px 8px; font-size: 11px;">按账号</button>
+              <button type="button" class="segment-btn" id="rankTabAuths" onclick="switchRankingMode('auths')" style="padding: 2px 8px; font-size: 11px;">按认证文件</button>
             </div>
           </div>
           <div class="bar-ranking-list" id="modelRankingList">
@@ -1043,7 +1043,7 @@
           <table>
             <thead>
               <tr>
-                <th class="sortable" onclick="handleSort('auths', 'auth_id')">认证文件 (Auth ID / 账号) <span id="sort-auths-auth_id" class="sort-arrow"></span></th>
+                <th class="sortable" onclick="handleSort('auths', 'auth_id')">认证文件 (Auth ID) <span id="sort-auths-auth_id" class="sort-arrow"></span></th>
                 <th class="sortable" onclick="handleSort('auths', 'provider')">AI 提供商 <span id="sort-auths-provider" class="sort-arrow"></span></th>
                 <th>凭证类型</th>
                 <th class="num sortable" onclick="handleSort('auths', 'requests')">请求次数 <span id="sort-auths-requests" class="sort-arrow"></span></th>
@@ -1133,23 +1133,23 @@
         </p>
         <!-- Option 1: Clean by specific Date -->
         <div class="form-row">
-          <label class="form-label">方式 1：删除指定某一日期之前的所有历史数据</label>
+          <label class="form-label">按日期清理：删除指定日期之前的历史记录</label>
           <div style="display: flex; gap: 8px;">
             <input type="date" id="cleanupSpecificDate" class="form-input" style="flex: 1;" autocomplete="off" data-1p-ignore data-lpignore="true">
-            <button id="btnCleanByDate" class="action-btn action-danger">按此日期清理</button>
+            <button id="btnCleanByDate" class="action-btn action-danger">按日期清理</button>
           </div>
         </div>
         <!-- Option 2: Clean by Days -->
         <div class="form-row">
-          <label class="form-label">方式 2：按保留天数清理（删除 N 天前的历史记录）</label>
+          <label class="form-label">按保留天数清理：删除指定天数之前的历史记录</label>
           <div style="display: flex; gap: 8px;">
-            <input type="number" id="cleanupDaysInput" class="form-input" placeholder="保留最近天数（默认 90 天）" value="90" style="flex: 1;" autocomplete="off" data-1p-ignore data-lpignore="true">
+            <input type="number" id="cleanupDaysInput" class="form-input" placeholder="保留最近天数（如 90）" value="90" style="flex: 1;" autocomplete="off" data-1p-ignore data-lpignore="true">
             <button id="btnCleanByDays" class="action-btn action-danger">按天数清理</button>
           </div>
         </div>
         <!-- Option 3: Reset All -->
         <div class="form-row" style="padding-top: 6px; border-top: 1px dashed var(--border-color);">
-          <label class="form-label" style="color: var(--error-color);">方式 3：全量清空所有数据（归零）</label>
+          <label class="form-label" style="color: var(--error-color);">全量清空：清空所有历史数据</label>
           <button id="btnCleanAll" class="action-btn action-danger" style="width: 100%; justify-content: center; height: 34px;">清空全部记录</button>
         </div>
       </div>
@@ -1385,7 +1385,7 @@
         chips.push({ key: 'key', label: `Key: ${state.filterAPIKey.substring(0, 14)}...`, onRemove: () => { state.filterAPIKey = ''; } });
       }
       if (state.filterAuthID) {
-        chips.push({ key: 'auth', label: `账号: ${state.filterAuthID}`, onRemove: () => { state.filterAuthID = ''; } });
+        chips.push({ key: 'auth', label: `认证文件: ${state.filterAuthID}`, onRemove: () => { state.filterAuthID = ''; } });
       }
       if (state.filterProvider) {
         chips.push({ key: 'prov', label: `提供商: ${state.filterProvider}`, onRemove: () => { state.filterProvider = ''; } });
@@ -1564,8 +1564,8 @@
         loadActiveTabData();
       });
 
-      const authOpts = [{ label: '全部认证文件 (账号)', value: '' }, ...(data.auth_ids || []).map(a => ({ label: a, value: a }))];
-      renderCustomDropdown('dropdownAuthID', authOpts, state.filterAuthID, '全部认证文件 (账号)', (val) => {
+      const authOpts = [{ label: '全部认证文件', value: '' }, ...(data.auth_ids || []).map(a => ({ label: a, value: a }))];
+      renderCustomDropdown('dropdownAuthID', authOpts, state.filterAuthID, '全部认证文件', (val) => {
         state.filterAuthID = val;
         updateActiveFilterChips();
         state.page = 1;
@@ -2101,7 +2101,7 @@
         ctx.fillStyle = textColor;
         ctx.font = "12px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("暂无走势数据 (等待网关请求流入)", w / 2, h / 2);
+        ctx.fillText("暂无走势数据", w / 2, h / 2);
         canvas.onmousemove = null;
         canvas.onmouseleave = null;
         return;
@@ -2217,8 +2217,8 @@
       const rawItems = [
         { label: "输入 Tokens", val: summary.input_tokens || 0, color: "#8b8680" },
         { label: "输出 Tokens", val: summary.output_tokens || 0, color: "#10b981" },
-        { label: "缓存读取 (Hit)", val: summary.cache_read_tokens || 0, color: isDark ? "#ffd862" : "#e0aa14" },
-        { label: "缓存写入 (Write)", val: summary.cache_creation_tokens || 0, color: "#c65746" }
+        { label: "缓存读取", val: summary.cache_read_tokens || 0, color: isDark ? "#ffd862" : "#e0aa14" },
+        { label: "缓存写入", val: summary.cache_creation_tokens || 0, color: "#c65746" }
       ];
 
       const total = rawItems.reduce((sum, item) => sum + item.val, 0);
@@ -2578,7 +2578,7 @@
       } else {
         const auths = state.authsData || [];
         if (!auths || auths.length === 0) {
-          container.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 40px 0; font-size: 13px;">暂无账号调用数据</div>';
+          container.innerHTML = '<div style="text-align: center; color: var(--text-tertiary); padding: 40px 0; font-size: 13px;">暂无认证文件调用数据</div>';
           return;
         }
 
@@ -2588,7 +2588,7 @@
         container.innerHTML = top.map(a => {
           const pct = Math.min(Math.max((a.total_cost / maxSpend) * 100, 4), 100);
           return `
-            <div class="bar-ranking-item" style="cursor: pointer;" onclick="focusAuth(${jsArg(a.auth_id)})" title="点击下钻此账号分析">
+            <div class="bar-ranking-item" style="cursor: pointer;" onclick="focusAuth(${jsArg(a.auth_id)})" title="点击下钻此认证文件分析">
               <div class="bar-item-header">
                 <span class="bar-item-name">${esc(a.auth_id)} <span style="font-size:11px;color:var(--text-tertiary);font-weight:normal;">(${esc(a.provider)}) →</span></span>
                 <span class="bar-item-val">${formatCost(a.total_cost)} · ${a.requests.toLocaleString()} 次</span>
