@@ -1172,6 +1172,9 @@
           使用量数据通过 CPA 的管理接口读取，需要管理密钥（即登录 CPA 控制面板时使用的那个口令）。
           密钥仅保存在本浏览器的 localStorage 中，不会写入服务端。
         </p>
+        <p style="color: var(--text-tertiary); font-size: 12px; line-height: 1.7;">
+          只需输入这一次。若在 CPA 控制面板登录时勾选「记住密码」，本看板会直接复用面板已保存的密钥，连这一次也不必输入。
+        </p>
         <div class="form-row">
           <label class="form-label" for="authKeyInput">管理密钥</label>
           <input type="password" id="authKeyInput" class="form-input" autocomplete="current-password"
@@ -1250,13 +1253,37 @@
         return k;
       },
       // Best-effort pickup of the key the CPA control panel persists when the
-      // operator ticked "remember password". Absent or restructured storage just
-      // falls through to the prompt.
+      // operator ticked "remember password".
+      //
+      // The panel stores that state under 'cli-proxy-auth', obfuscated: the JSON
+      // is XORed with utf8("cli-proxy-api-webui::secure-storage|<host>|<ua>"),
+      // base64'd and prefixed with "enc::v1::". This page is same-origin with the
+      // panel and runs in the same browser, so host and userAgent -- and hence the
+      // key material -- are identical.
+      //
+      // Without "remember password" the panel keeps the key in memory only and
+      // nothing is stored, so this returns '' and the prompt is shown. A changed
+      // storage format does the same rather than throwing.
       adoptPanelKey() {
         try {
           const raw = localStorage.getItem('cli-proxy-auth');
+          const PREFIX = 'enc::v1::';
           if (!raw) return '';
-          const parsed = JSON.parse(raw);
+
+          let plain = raw;
+          if (raw.startsWith(PREFIX)) {
+            const material = new TextEncoder().encode(
+              'cli-proxy-api-webui::secure-storage|' + window.location.host + '|' + navigator.userAgent
+            );
+            const bin = atob(raw.slice(PREFIX.length));
+            const bytes = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) {
+              bytes[i] = bin.charCodeAt(i) ^ material[i % material.length];
+            }
+            plain = new TextDecoder().decode(bytes);
+          }
+
+          const parsed = JSON.parse(plain);
           const st = (parsed && parsed.state) || parsed || {};
           const k = st.managementKey || '';
           return typeof k === 'string' ? k : '';
