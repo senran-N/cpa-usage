@@ -23,6 +23,11 @@ import (
 type Config struct {
 	DBPath        string `yaml:"db_path"`
 	RetentionDays int    `yaml:"retention_days"`
+	// UnauthenticatedAPI exposes the JSON endpoints under the host's resource
+	// path, which CPA serves without management authentication. It defaults to
+	// false: the dashboard then talks to the authenticated management routes
+	// instead. Only enable it when CPA is reachable from trusted hosts alone.
+	UnauthenticatedAPI bool `yaml:"unauthenticated_api"`
 }
 
 // Plugin manages the usage collector and management dashboard lifecycle.
@@ -83,6 +88,8 @@ func (p *Plugin) Register(payload []byte) ([]byte, error) {
 			if cfg.RetentionDays > 0 {
 				p.config.RetentionDays = cfg.RetentionDays
 			}
+			// Absent key leaves this false, which is the safe default.
+			p.config.UnauthenticatedAPI = cfg.UnauthenticatedAPI
 		}
 	}
 
@@ -110,6 +117,11 @@ func (p *Plugin) Register(payload []byte) ([]byte, error) {
 					Name:        "retention_days",
 					Type:        pluginapi.ConfigFieldTypeInteger,
 					Description: "Retention period in days for usage data (0 for unlimited, default: 90)",
+				},
+				{
+					Name:        "unauthenticated_api",
+					Type:        pluginapi.ConfigFieldTypeBoolean,
+					Description: "Expose the JSON endpoints on the unauthenticated resource path (default: false). Leave disabled unless CPA is reachable only from trusted hosts.",
 				},
 			},
 		},
@@ -230,8 +242,29 @@ type managementRegistrationResp struct {
 	Resources []pluginapi.ResourceRoute   `json:"resources"`
 }
 
+// resourcePathPrefix is the host-owned prefix for browser-navigable plugin
+// resources. CPA serves it without management authentication.
+const resourcePathPrefix = "/v0/resource/plugins/"
+
+// apiEndpoints lists the JSON endpoints, relative to whichever base they are
+// mounted under.
+var apiEndpoints = []string{
+	"summary", "timeseries", "models", "keys",
+	"auths", "records", "filter-options", "cleanup", "ping",
+}
+
 // RegisterManagement exposes API routes and Web Dashboard UI resources.
+//
+// Management routes sit behind CPA's management authentication. Resource routes
+// do not: the host serves /v0/resource/plugins/<id>/ without running the
+// management middleware. Only the dashboard document is registered there by
+// default, so the JSON endpoints stay behind authentication. Setting
+// unauthenticated_api restores the endpoints on the resource path as well.
 func (p *Plugin) RegisterManagement(payload []byte) ([]byte, error) {
+	p.mu.RLock()
+	unauthenticated := p.config.UnauthenticatedAPI
+	p.mu.RUnlock()
+
 	resp := managementRegistrationResp{
 		Routes: []pluginapi.ManagementRoute{
 			{Method: "GET", Path: "/usage/summary"},
@@ -248,19 +281,17 @@ func (p *Plugin) RegisterManagement(payload []byte) ([]byte, error) {
 			{
 				Path:        "/dashboard",
 				Menu:        "使用量看板 (Usage)",
-				Description: "全面可视化监控：模型调用、Token 消耗、实时美刀计费与日志分析",
+				Description: "模型调用、Token 消耗、费用估算与请求日志",
 			},
-			{Path: "/api/summary"},
-			{Path: "/api/timeseries"},
-			{Path: "/api/models"},
-			{Path: "/api/keys"},
-			{Path: "/api/auths"},
-			{Path: "/api/records"},
-			{Path: "/api/filter-options"},
-			{Path: "/api/cleanup"},
-			{Path: "/api/ping"},
 		},
 	}
+
+	if unauthenticated {
+		for _, name := range apiEndpoints {
+			resp.Resources = append(resp.Resources, pluginapi.ResourceRoute{Path: "/api/" + name})
+		}
+	}
+
 	return json.Marshal(resp)
 }
 
@@ -273,6 +304,7 @@ func (p *Plugin) HandleManagement(payload []byte) ([]byte, error) {
 
 	p.mu.RLock()
 	handler := p.apiHandler
+	unauthenticated := p.config.UnauthenticatedAPI
 	p.mu.RUnlock()
 
 	path := strings.TrimSpace(req.Path)
@@ -291,12 +323,24 @@ func (p *Plugin) HandleManagement(payload []byte) ([]byte, error) {
 				"Content-Type":  []string{"text/html; charset=utf-8"},
 				"Cache-Control": []string{"no-cache, no-store, must-revalidate"},
 			},
-			Body: web.IndexHTML,
+			Body: web.Dashboard(web.BootConfig{UnauthenticatedAPI: unauthenticated}),
 		}
 		return json.Marshal(resp)
 	}
 
-	// 2. Dispatch to JSON API Handler
+	// 2. Refuse JSON requests that arrived on the unauthenticated resource path
+	// unless it was explicitly opened up. The routes are not registered there in
+	// that case, so this only guards against a stale route table after a reload.
+	if !unauthenticated && strings.HasPrefix(cleanPath, resourcePathPrefix) {
+		resp := pluginapi.ManagementResponse{
+			StatusCode: http.StatusNotFound,
+			Headers:    http.Header{"Content-Type": []string{"application/json; charset=utf-8"}},
+			Body:       []byte(`{"error":"not_found","message":"the JSON API is served under /v0/management/usage/ and requires a management key"}`),
+		}
+		return json.Marshal(resp)
+	}
+
+	// 3. Dispatch to JSON API Handler
 	if handler == nil {
 		resp := pluginapi.ManagementResponse{
 			StatusCode: http.StatusServiceUnavailable,

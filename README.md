@@ -57,6 +57,8 @@ plugins:
       enabled: true
       db_path: "data/cpa_usage.db"
       retention_days: 90
+      # 可选，默认 false。见下方“安全注意事项”。
+      unauthenticated_api: false
 ```
 
 ### 配置项
@@ -65,6 +67,7 @@ plugins:
 |---|---|---|---|
 | `db_path` | string | `data/cpa_usage.db` | SQLite 数据库路径，相对于 CPA 的工作目录。父目录会自动创建。 |
 | `retention_days` | int | `90` | 保留天数。大于 0 时，插件在打开数据库后执行一次清理，删除早于该天数的记录；设为 0 表示不自动清理。 |
+| `unauthenticated_api` | bool | `false` | 是否把 JSON 接口同时挂到 CPA 的资源路径上。资源路径不经过管理认证，详见下方安全章节。保持默认值时看板改用管理密钥访问 management 路由。 |
 
 `scripts/setup.sh` 与 `scripts/setup.bat` 封装了"复制动态库 + 打补丁"的步骤，假定 `CLIProxyAPI` 与本仓库位于同级目录。
 
@@ -75,6 +78,10 @@ plugins:
 ```text
 http://<cpa-host>:<port>/v0/resource/plugins/cpa-usage/dashboard
 ```
+
+首次打开时看板会要求输入**管理密钥**，即登录 CPA 控制面板使用的那个口令。密钥只保存在浏览器的 localStorage（键名 `cpa-usage:management-key`），随请求以 `X-Management-Key` 头发送，不会写入服务端。若控制面板勾选过"记住密码"，看板会尝试直接复用它已保存的密钥，此时无需输入。
+
+CPA 对同一 IP 连续 5 次密钥错误会封禁 30 分钟，因此看板在密钥缺失或被拒绝时会完全停止发送请求（包括自动刷新），并且每次只用一个 `/ping` 请求校验密钥，不会一次性打满失败次数。
 
 `scripts/patch_observe.py` 可选地把看板入口注入到 CPA 官方控制面板的侧边栏"观测"分组中：
 
@@ -90,8 +97,8 @@ python scripts/patch_observe.py --restore  # 从 .bak 还原
 
 插件注册两组路由，指向同一套处理逻辑：
 
-- **Management 路由**，前缀 `/v0/management/usage/`，经过 CPA 的管理认证。
-- **资源路由**，前缀 `/v0/resource/plugins/cpa-usage/api/`，**不经过认证**，且宿主只放行 GET。看板自身的数据请求走这一组。
+- **Management 路由**，前缀 `/v0/management/usage/`，经过 CPA 的管理认证。看板默认走这一组。
+- **资源路由**，前缀 `/v0/resource/plugins/cpa-usage/`，**不经过认证**，且宿主只放行 GET。默认只注册 `/dashboard` 这一个文档路由；JSON 接口只有在 `unauthenticated_api: true` 时才会额外挂到 `/v0/resource/plugins/cpa-usage/api/` 下。
 
 | 端点 | Management 方法 | 说明 |
 |---|---|---|
@@ -105,18 +112,22 @@ python scripts/patch_observe.py --restore  # 从 .bak 还原
 | `cleanup` | POST | 删除历史记录，`days`（默认 90）或 `before`（时间戳 / RFC3339 / `YYYY-MM-DD`）；`days=0` 或 `days=all` 清空全部 |
 | `ping` | GET | 健康检查 |
 
-例如汇总数据的两个入口分别是 `/v0/management/usage/summary` 与 `/v0/resource/plugins/cpa-usage/api/summary`。处理器对 `cleanup` 同时接受 GET、POST 和 DELETE，因此它在资源路由下也可通过 GET 触发——参见下一节。
+默认配置下汇总数据的入口是 `/v0/management/usage/summary`，需要 `X-Management-Key`。处理器对 `cleanup` 同时接受 GET、POST 和 DELETE；开启 `unauthenticated_api` 后，由于资源路由只放行 GET，它在该路径下可通过 GET 触发——参见下一节。
 
 通用查询参数：`start_time`、`end_time`、`model`、`provider`、`api_key`、`auth_id`、`failed`、`search`。时间参数接受 Unix 秒/毫秒时间戳、RFC3339 或 `YYYY-MM-DD`。所有时间在服务端按 UTC 存储与分桶。
 
 ## 安全注意事项
 
-**资源路由不经过管理认证。** 这是 CPA 插件宿主的设计：`/v0/resource/plugins/<id>/` 下的 GET 请求不走 management 中间件（见上游 `internal/api/server_management.go` 的 `pluginResourceNoRoute`）。本插件把看板及其全部数据接口都注册为资源路由，因此在当前实现下：
+**CPA 的资源路径不经过管理认证。** 这是插件宿主的设计：`/v0/resource/plugins/<id>/` 下的 GET 请求不走 management 中间件（见上游 `internal/api/server_management.go` 的 `pluginResourceNoRoute`），因为控制面板要用 iframe 加载插件页面，无法附带管理密钥请求头。CPA 自身的认证是按路由组挂载的，不是全局中间件，所以设置了 `secret-key` 并不会覆盖到这条路径。
 
-- 任何能访问 CPA 监听端口的客户端都可以读取 `/v0/resource/plugins/cpa-usage/api/records`，其中包含**明文的客户端 API Key**、上游凭证 ID、会话 ID 以及上游返回的错误响应体。
-- `/v0/resource/plugins/cpa-usage/api/cleanup?days=0` 是一个 GET 请求，可以在无认证的情况下清空整个用量数据库。
+因此本插件**默认不在资源路径上暴露任何数据接口**：那里只注册看板文档本身，JSON 接口仅存在于经过认证的 `/v0/management/usage/`，由看板携带管理密钥访问。
 
-在把 CPA 暴露到可信网络之外时，请自行在反向代理层对 `/v0/resource/plugins/cpa-usage/` 加认证或限制来源，或移除 `plugin.go` 中 `RegisterManagement` 的资源路由声明、改为仅使用 management 路由。
+`unauthenticated_api: true` 会把 JSON 接口重新挂到资源路径上，恢复无需密钥即可打开看板的行为。开启后，任何能访问 CPA 监听地址的客户端都可以：
+
+- 读取 `/v0/resource/plugins/cpa-usage/api/records`，其中包含**明文的客户端 API Key**、上游凭证 ID、会话 ID 以及上游返回的错误响应体；
+- 通过 `GET /v0/resource/plugins/cpa-usage/api/cleanup?days=0` 清空整个用量数据库。
+
+只有在 CPA 仅监听 `127.0.0.1` 且不经反向代理对外暴露时才适合开启。注意这两个前提是会变的：把 `host` 改成 `0.0.0.0`、或在前面加一层反代，这个开关就会从"本机可见"变成"对外可见"，而配置本身不会有任何提示。
 
 数据库文件未加密，其内容应按凭证材料的级别保护。
 

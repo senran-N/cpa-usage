@@ -1161,8 +1161,37 @@
     </div>
   </div>
 
+  <!-- Management Key Modal -->
+  <div id="authModal" class="modal-backdrop">
+    <div class="modal-card" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 style="font-size: 14px; font-weight: 600;">需要管理密钥</h3>
+      </div>
+      <div class="modal-body">
+        <p style="color: var(--text-secondary); font-size: 13px; line-height: 1.7;">
+          使用量数据通过 CPA 的管理接口读取，需要管理密钥（即登录 CPA 控制面板时使用的那个口令）。
+          密钥仅保存在本浏览器的 localStorage 中，不会写入服务端。
+        </p>
+        <div class="form-row">
+          <label class="form-label" for="authKeyInput">管理密钥</label>
+          <input type="password" id="authKeyInput" class="form-input" autocomplete="current-password"
+                 placeholder="Management Key" style="width: 100%;">
+        </div>
+        <div id="authError" style="display: none; color: var(--error-color); font-size: 12.5px; padding-top: 2px;"></div>
+        <p style="color: var(--text-tertiary); font-size: 11.5px; line-height: 1.6; padding-top: 4px;">
+          注意：CPA 对同一 IP 连续 5 次密钥错误会封禁 30 分钟，请确认后再提交。
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button id="authSubmit" class="action-btn" style="font-weight: 600;">连接</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Floating Chart Tooltip -->
   <div id="chartTooltip" class="chart-tooltip" style="display: none;"></div>
+
+  <script id="cpa-usage-boot" type="application/json">{"unauthenticated_api":false}</script>
 
   <script>
     // State management supporting full orthogonal filter combinations
@@ -1186,17 +1215,66 @@
       keysData: []
     };
 
-    function getAPIBase() {
-      const p = window.location.pathname;
-      if (p.includes('/v0/resource/plugins/cpa-usage')) {
-        return '/v0/resource/plugins/cpa-usage/api';
+    // ---- Boot configuration, injected by the plugin when serving this page ----
+    const BOOT = (() => {
+      const fallback = { unauthenticated_api: false };
+      try {
+        const el = document.getElementById('cpa-usage-boot');
+        return el ? Object.assign(fallback, JSON.parse(el.textContent)) : fallback;
+      } catch (e) {
+        return fallback;
       }
-      if (p.includes('/v0/management/usage')) {
-        return '/v0/management/usage/api';
+    })();
+
+    // The JSON endpoints live on two bases. The resource base is served without
+    // authentication and only exists when unauthenticated_api is enabled; the
+    // management base always exists and requires a management key.
+    const RESOURCE_BASE = '/v0/resource/plugins/cpa-usage/api';
+    const MANAGEMENT_BASE = '/v0/management/usage';
+    const NEEDS_KEY = !BOOT.unauthenticated_api;
+    const API_BASE = NEEDS_KEY ? MANAGEMENT_BASE : RESOURCE_BASE;
+    const KEY_STORAGE = 'cpa-usage:management-key';
+
+    const auth = {
+      key: '',
+      // Blocks every data load while the key is missing or rejected, so a stale
+      // key cannot be replayed by the refresh timer into CPA's 5-strike lockout.
+      blocked: NEEDS_KEY,
+      load() {
+        if (!NEEDS_KEY) return '';
+        let k = '';
+        try { k = localStorage.getItem(KEY_STORAGE) || ''; } catch (e) { k = ''; }
+        if (!k) k = this.adoptPanelKey();
+        this.key = k;
+        this.blocked = !k;
+        return k;
+      },
+      // Best-effort pickup of the key the CPA control panel persists when the
+      // operator ticked "remember password". Absent or restructured storage just
+      // falls through to the prompt.
+      adoptPanelKey() {
+        try {
+          const raw = localStorage.getItem('cli-proxy-auth');
+          if (!raw) return '';
+          const parsed = JSON.parse(raw);
+          const st = (parsed && parsed.state) || parsed || {};
+          const k = st.managementKey || '';
+          return typeof k === 'string' ? k : '';
+        } catch (e) {
+          return '';
+        }
+      },
+      save(k) {
+        this.key = k;
+        this.blocked = !k;
+        try { localStorage.setItem(KEY_STORAGE, k); } catch (e) { /* private mode */ }
+      },
+      clear() {
+        this.key = '';
+        this.blocked = true;
+        try { localStorage.removeItem(KEY_STORAGE); } catch (e) { /* private mode */ }
       }
-      return '/v0/resource/plugins/cpa-usage/api';
-    }
-    const API_BASE = getAPIBase();
+    };
 
     // Escapes a value for safe interpolation into HTML text or attribute context.
     function esc(v) {
@@ -1536,10 +1614,44 @@
       });
     });
 
+    // Raised when the key is missing or was rejected. Callers treat it as "stop
+    // quietly"; the modal is already on screen.
+    class AuthRequired extends Error {
+      constructor(msg) { super(msg || 'authentication required'); this.name = 'AuthRequired'; }
+    }
+
     async function fetchJSON(url, opts) {
-      const res = await fetch(url, opts);
+      const options = Object.assign({}, opts);
+      if (NEEDS_KEY) {
+        if (auth.blocked || !auth.key) {
+          showAuthModal();
+          throw new AuthRequired();
+        }
+        options.headers = Object.assign({}, options.headers, { 'X-Management-Key': auth.key });
+      }
+
+      const res = await fetch(url, options);
+
+      // 401 means the key is wrong; 403 covers "remote management disabled" and
+      // the IP lockout. Never retry automatically in either case.
+      if (res.status === 401 || res.status === 403) {
+        const detail = await res.text().catch(() => '');
+        auth.clear();
+        showAuthModal(extractError(detail) || ('HTTP ' + res.status));
+        throw new AuthRequired();
+      }
+
       if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + (await res.text()));
       return await res.json();
+    }
+
+    function extractError(body) {
+      try {
+        const parsed = JSON.parse(body);
+        return parsed.error || parsed.message || '';
+      } catch (e) {
+        return (body || '').slice(0, 200);
+      }
     }
 
     async function loadFilterOptions() {
@@ -2451,6 +2563,9 @@
     }
 
     function loadActiveTabData() {
+      // Skip entirely while unauthenticated so the refresh timer cannot burn
+      // through CPA's failed-attempt budget in the background.
+      if (auth.blocked) return;
       if (state.activeTab === 'tab-overview') {
         loadSummary();
         loadTimeSeries();
@@ -2528,7 +2643,7 @@
         document.body.removeChild(link);
         URL.revokeObjectURL(objectUrl);
       } catch (err) {
-        alert('导出失败: ' + err.message);
+        if (err.name !== 'AuthRequired') alert('导出失败: ' + err.message);
       }
     });
 
@@ -2553,12 +2668,12 @@
       }
       if (!confirm(`确定删除 ${dateVal} 之前的所有使用量记录吗？`)) return;
       try {
-        const res = await fetchJSON(API_BASE + '/cleanup?before=' + encodeURIComponent(dateVal));
+        const res = await cleanupRequest('before=' + encodeURIComponent(dateVal));
         alert(`清理完成: 成功删除 ${res.deleted_rows} 条历史记录！`);
         cleanupModal.classList.remove('active');
         loadActiveTabData();
       } catch (err) {
-        alert('清理失败: ' + err.message);
+        if (err.name !== 'AuthRequired') alert('清理失败: ' + err.message);
       }
     });
 
@@ -2567,12 +2682,12 @@
       const days = document.getElementById('cleanupDaysInput').value || '90';
       if (!confirm(`确定清理 ${days} 天前的历史记录吗？`)) return;
       try {
-        const res = await fetchJSON(API_BASE + '/cleanup?days=' + encodeURIComponent(days));
+        const res = await cleanupRequest('days=' + encodeURIComponent(days));
         alert(`清理完成: 成功删除 ${res.deleted_rows} 条历史记录！`);
         cleanupModal.classList.remove('active');
         loadActiveTabData();
       } catch (err) {
-        alert('清理失败: ' + err.message);
+        if (err.name !== 'AuthRequired') alert('清理失败: ' + err.message);
       }
     });
 
@@ -2580,23 +2695,138 @@
     document.getElementById('btnCleanAll').addEventListener('click', async () => {
       if (!confirm('警告：此操作将永久清空数据库内全部使用量记录，确定继续吗？')) return;
       try {
-        const res = await fetchJSON(API_BASE + '/cleanup?days=0');
+        const res = await cleanupRequest('days=0');
         alert(`清理完成: 成功删除 ${res.deleted_rows} 条历史记录，数据已归零！`);
         cleanupModal.classList.remove('active');
         loadActiveTabData();
       } catch (err) {
-        alert('清空失败: ' + err.message);
+        if (err.name !== 'AuthRequired') alert('清空失败: ' + err.message);
       }
     });
 
 
 
-    window.addEventListener('DOMContentLoaded', () => {
-      initDropdowns();
+    // The management route for cleanup is registered as POST; the resource route
+    // is GET-only because the host allows nothing else there.
+    function cleanupRequest(query) {
+      const opts = NEEDS_KEY ? { method: 'POST' } : undefined;
+      return fetchJSON(API_BASE + '/cleanup?' + query, opts);
+    }
+
+    // ---- Management key modal ----
+    const authModal = document.getElementById('authModal');
+    const authInput = document.getElementById('authKeyInput');
+    const authErrorEl = document.getElementById('authError');
+
+    function showAuthModal(message) {
+      if (!authModal) return;
+      if (message) {
+        authErrorEl.textContent = message;
+        authErrorEl.style.display = 'block';
+      } else {
+        authErrorEl.style.display = 'none';
+      }
+      if (!authModal.classList.contains('active')) {
+        authModal.classList.add('active');
+        setTimeout(() => authInput && authInput.focus(), 50);
+      }
+    }
+
+    function hideAuthModal() {
+      if (authModal) authModal.classList.remove('active');
+      if (authErrorEl) authErrorEl.style.display = 'none';
+    }
+
+    async function submitKey() {
+      const k = (authInput.value || '').trim();
+      if (!k) {
+        authErrorEl.textContent = '请输入管理密钥';
+        authErrorEl.style.display = 'block';
+        return;
+      }
+      // Validate before unblocking, so a wrong key costs one attempt rather
+      // than one per endpoint the dashboard would have loaded.
+      let result;
+      try {
+        result = await verifyKey(k);
+      } catch (err) {
+        authErrorEl.textContent = '无法连接到 CPA: ' + err.message;
+        authErrorEl.style.display = 'block';
+        return;
+      }
+
+      if (!result.ok) {
+        auth.clear();
+        authErrorEl.textContent = result.message;
+        authErrorEl.style.display = 'block';
+        return;
+      }
+
+      auth.save(k);
+      authInput.value = '';
+      hideAuthModal();
+      startDashboard();
+    }
+
+    if (authModal) {
+      document.getElementById('authSubmit').addEventListener('click', submitKey);
+      authInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitKey();
+      });
+    }
+
+    function startDashboard() {
       loadFilterOptions();
       loadActiveTabData();
+    }
+
+    // Validates a key with exactly one request. Loading the dashboard fires
+    // several calls at once, so an unchecked stale key would spend five failed
+    // attempts in one go and trip CPA's 30-minute IP lockout.
+    async function verifyKey(k) {
+      const res = await fetch(MANAGEMENT_BASE + '/ping', { headers: { 'X-Management-Key': k } });
+      if (res.ok) return { ok: true };
+      const detail = await res.text().catch(() => '');
+      return { ok: false, message: extractError(detail) || ('HTTP ' + res.status) };
+    }
+
+    async function bootstrap() {
+      initDropdowns();
       state.timer = setInterval(loadActiveTabData, 15000);
-    });
+
+      if (!NEEDS_KEY) {
+        startDashboard();
+        return;
+      }
+
+      const stored = auth.load();
+      if (!stored) {
+        showAuthModal();
+        return;
+      }
+
+      // Keep the dashboard blocked until the stored key is known to work.
+      auth.blocked = true;
+      let result;
+      try {
+        result = await verifyKey(stored);
+      } catch (err) {
+        auth.clear();
+        showAuthModal('无法连接到 CPA: ' + err.message);
+        return;
+      }
+
+      if (!result.ok) {
+        auth.clear();
+        showAuthModal(result.message);
+        return;
+      }
+
+      auth.blocked = false;
+      startDashboard();
+    }
+
+    window.addEventListener('DOMContentLoaded', bootstrap);
   </script>
 </body>
 </html>

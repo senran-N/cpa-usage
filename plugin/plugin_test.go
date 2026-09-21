@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,4 +127,168 @@ func TestPluginLifecycle(t *testing.T) {
 
 	// 6. Test Shutdown
 	p.Shutdown()
+}
+
+// registerWithConfig resets the singleton's configuration through the normal
+// lifecycle call and returns the management registration response.
+func registerWithConfig(t *testing.T, configYAML string) managementRegistrationResp {
+	t.Helper()
+
+	// Not t.TempDir(): the singleton keeps the first database it opened, and
+	// Windows refuses to unlink a file that is still open, which would fail the
+	// test during cleanup rather than on an assertion.
+	tempDir, err := os.MkdirTemp("", "cpa-usage-routes-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(tempDir) })
+
+	dbPath := filepath.ToSlash(filepath.Join(tempDir, "routes.db"))
+	full := "db_path: \"" + dbPath + "\"\n" + configYAML
+
+	regReq, _ := json.Marshal(map[string]any{
+		"config_yaml":    []byte(full),
+		"schema_version": 6,
+	})
+	if _, errRegister := Instance().Register(regReq); errRegister != nil {
+		t.Fatalf("register failed: %v", errRegister)
+	}
+
+	raw, errManagement := Instance().RegisterManagement(nil)
+	if errManagement != nil {
+		t.Fatalf("RegisterManagement failed: %v", errManagement)
+	}
+	var resp managementRegistrationResp
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("failed to unmarshal management registration: %v", err)
+	}
+	return resp
+}
+
+func resourcePaths(resp managementRegistrationResp) []string {
+	out := make([]string, 0, len(resp.Resources))
+	for _, r := range resp.Resources {
+		out = append(out, r.Path)
+	}
+	return out
+}
+
+// The JSON endpoints must not appear on the host's unauthenticated resource
+// path unless the operator explicitly opted in.
+func TestResourceRoutesExcludeAPIByDefault(t *testing.T) {
+	resp := registerWithConfig(t, "retention_days: 30\n")
+
+	paths := resourcePaths(resp)
+	if len(paths) != 1 || paths[0] != "/dashboard" {
+		t.Fatalf("resource routes = %v, want only /dashboard", paths)
+	}
+
+	// The management routes still carry the full API.
+	if len(resp.Routes) != len(apiEndpoints) {
+		t.Fatalf("management routes = %d, want %d", len(resp.Routes), len(apiEndpoints))
+	}
+	for _, r := range resp.Routes {
+		if r.Path == "/usage/cleanup" && r.Method != http.MethodPost {
+			t.Errorf("cleanup management route method = %s, want POST", r.Method)
+		}
+	}
+}
+
+func TestResourceRoutesIncludeAPIWhenOptedIn(t *testing.T) {
+	resp := registerWithConfig(t, "retention_days: 30\nunauthenticated_api: true\n")
+
+	paths := resourcePaths(resp)
+	if len(paths) != 1+len(apiEndpoints) {
+		t.Fatalf("resource routes = %v, want /dashboard plus %d API paths", paths, len(apiEndpoints))
+	}
+	found := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		found[p] = true
+	}
+	for _, name := range apiEndpoints {
+		if !found["/api/"+name] {
+			t.Errorf("missing resource route /api/%s", name)
+		}
+	}
+
+	// Reset the singleton so ordering between tests does not leak the opt-in.
+	registerWithConfig(t, "retention_days: 30\n")
+}
+
+// Requests that reach the handler on the resource path must be refused while
+// the opt-in is off, even if a stale route table still points there.
+func TestHandleManagementRejectsResourceAPIWhenDisabled(t *testing.T) {
+	registerWithConfig(t, "retention_days: 30\n")
+
+	req, _ := json.Marshal(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/resource/plugins/cpa-usage/api/records",
+		Query:  url.Values{},
+	})
+	raw, err := Instance().HandleManagement(req)
+	if err != nil {
+		t.Fatalf("HandleManagement failed: %v", err)
+	}
+	var resp pluginapi.ManagementResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+
+	// The same request on the management path is served normally.
+	req, _ = json.Marshal(pluginapi.ManagementRequest{
+		Method: http.MethodGet,
+		Path:   "/v0/management/usage/records",
+		Query:  url.Values{},
+	})
+	raw, err = Instance().HandleManagement(req)
+	if err != nil {
+		t.Fatalf("HandleManagement failed: %v", err)
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("management path status = %d, want 200", resp.StatusCode)
+	}
+}
+
+// The dashboard document must tell the page which mode it is running in.
+func TestDashboardCarriesBootConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		config string
+		want   string
+	}{
+		{"default", "retention_days: 30\n", `{"unauthenticated_api":false}`},
+		{"opted in", "retention_days: 30\nunauthenticated_api: true\n", `{"unauthenticated_api":true}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			registerWithConfig(t, tc.config)
+
+			req, _ := json.Marshal(pluginapi.ManagementRequest{
+				Method: http.MethodGet,
+				Path:   "/v0/resource/plugins/cpa-usage/dashboard",
+				Query:  url.Values{},
+			})
+			raw, err := Instance().HandleManagement(req)
+			if err != nil {
+				t.Fatalf("HandleManagement failed: %v", err)
+			}
+			var resp pluginapi.ManagementResponse
+			if err := json.Unmarshal(raw, &resp); err != nil {
+				t.Fatalf("failed to unmarshal response: %v", err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want 200", resp.StatusCode)
+			}
+			if !strings.Contains(string(resp.Body), tc.want) {
+				t.Errorf("dashboard document does not contain %s", tc.want)
+			}
+		})
+	}
+
+	registerWithConfig(t, "retention_days: 30\n")
 }
