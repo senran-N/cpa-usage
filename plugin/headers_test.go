@@ -39,8 +39,10 @@ func TestParseResponseHeaders(t *testing.T) {
 	codexHeaders.Set("X-Codex-Plan-Type", "plus")
 	codexHeaders.Set("X-Codex-Primary-Used-Percent", "92.5")
 	codexHeaders.Set("X-Codex-Primary-Reset-After-Seconds", "7200")
+	codexHeaders.Set("X-Codex-Primary-Window-Minutes", "300")
 	codexHeaders.Set("X-Codex-Secondary-Used-Percent", "45.0")
 	codexHeaders.Set("X-Codex-Secondary-Reset-After-Seconds", "86400")
+	codexHeaders.Set("X-Codex-Secondary-Window-Minutes", "10080")
 	codexHeaders.Set("X-Codex-Rate-Limit-Reached-Type", "primary")
 
 	codexDerived := ParseResponseHeaders(codexHeaders, 429, base)
@@ -50,12 +52,21 @@ func TestParseResponseHeaders(t *testing.T) {
 	if codexDerived.QuotaUsedPercent == nil || *codexDerived.QuotaUsedPercent != 92.5 {
 		t.Errorf("expected primary used percent 92.5, got %v", codexDerived.QuotaUsedPercent)
 	}
+	if codexDerived.QuotaWindowMinutes == nil || *codexDerived.QuotaWindowMinutes != 300 {
+		t.Errorf("expected primary window minutes 300, got %v", codexDerived.QuotaWindowMinutes)
+	}
+	if codexDerived.RateLimitReachedType != "primary" {
+		t.Errorf("expected reached type primary, got %q", codexDerived.RateLimitReachedType)
+	}
 	expectedPrimaryRecover := base.Add(7200 * time.Second).UnixMilli()
 	if codexDerived.QuotaRecoverAtMS != expectedPrimaryRecover {
 		t.Errorf("expected quota recover ms %d, got %d", expectedPrimaryRecover, codexDerived.QuotaRecoverAtMS)
 	}
 	if codexDerived.SecondaryQuotaUsedPercent == nil || *codexDerived.SecondaryQuotaUsedPercent != 45.0 {
 		t.Errorf("expected secondary used percent 45.0, got %v", codexDerived.SecondaryQuotaUsedPercent)
+	}
+	if codexDerived.SecondaryQuotaWindowMinutes == nil || *codexDerived.SecondaryQuotaWindowMinutes != 10080 {
+		t.Errorf("expected secondary window minutes 10080, got %v", codexDerived.SecondaryQuotaWindowMinutes)
 	}
 	expectedSecondaryRecover := base.Add(86400 * time.Second).UnixMilli()
 	if codexDerived.SecondaryQuotaRecoverAtMS != expectedSecondaryRecover {

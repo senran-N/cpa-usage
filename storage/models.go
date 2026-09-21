@@ -4,52 +4,55 @@ import "time"
 
 // Record represents an ingested usage log with billing and token metrics.
 type Record struct {
-	ID                              int64     `json:"id"`
-	Provider                        string    `json:"provider"`
-	BaseURL                         string    `json:"base_url,omitempty"`
-	ExecutorType                    string    `json:"executor_type,omitempty"`
-	Model                           string    `json:"model"`
-	Alias                           string    `json:"alias,omitempty"`
-	APIKey                          string    `json:"api_key,omitempty"`
-	SessionID                       string    `json:"session_id,omitempty"`
-	ParentSessionID                 string    `json:"parent_session_id,omitempty"`
-	AuthID                          string    `json:"auth_id,omitempty"`
-	AuthIndex                       string    `json:"auth_index,omitempty"`
-	AuthType                        string    `json:"auth_type,omitempty"`
-	Source                          string    `json:"source,omitempty"`
-	ReasoningEffort                 string    `json:"reasoning_effort,omitempty"`
-	ServiceTier                     string    `json:"service_tier,omitempty"`
-	Generate                        bool      `json:"generate"`
-	RequestedAt                     time.Time `json:"requested_at"`
-	LatencyMs                       int64     `json:"latency_ms"`
-	TTFTMs                          int64     `json:"ttft_ms"`
-	Failed                          bool      `json:"failed"`
-	FailureStatusCode               int       `json:"failure_status_code,omitempty"`
-	FailureBody                     string    `json:"failure_body,omitempty"`
-	FailSummary                     string    `json:"fail_summary,omitempty"`
-	HeaderErrorKind                 string    `json:"header_error_kind,omitempty"`
-	HeaderErrorCode                 string    `json:"header_error_code,omitempty"`
-	HeaderTraceID                   string    `json:"header_trace_id,omitempty"`
-	HeaderQuotaRecoverAtMS          int64     `json:"header_quota_recover_at_ms,omitempty"`
-	HeaderQuotaUsedPercent          *float64  `json:"header_quota_used_percent,omitempty"`
-	HeaderSecondaryQuotaRecoverAtMS int64     `json:"header_secondary_quota_recover_at_ms,omitempty"`
-	HeaderSecondaryQuotaUsedPercent *float64  `json:"header_secondary_quota_used_percent,omitempty"`
-	PlanType                        string    `json:"plan_type,omitempty"`
-	ResponseModel                   string    `json:"response_model,omitempty"`
-	ModelMismatch                   bool      `json:"model_mismatch,omitempty"`
-	InputTokens                     int64     `json:"input_tokens"`
-	OutputTokens                    int64     `json:"output_tokens"`
-	ReasoningTokens                 int64     `json:"reasoning_tokens"`
-	CachedTokens                    int64     `json:"cached_tokens"`
-	CacheReadTokens                 int64     `json:"cache_read_tokens"`
-	CacheCreationTokens             int64     `json:"cache_creation_tokens"`
-	TotalTokens                     int64     `json:"total_tokens"`
-	InputCost                       float64   `json:"input_cost"`
-	OutputCost                      float64   `json:"output_cost"`
-	CacheReadCost                   float64   `json:"cache_read_cost"`
-	CacheCreationCost               float64   `json:"cache_creation_cost"`
-	TotalCost                       float64   `json:"total_cost"`
-	MatchedModel                    string    `json:"matched_model,omitempty"`
+	ID                                int64     `json:"id"`
+	Provider                          string    `json:"provider"`
+	BaseURL                           string    `json:"base_url,omitempty"`
+	ExecutorType                      string    `json:"executor_type,omitempty"`
+	Model                             string    `json:"model"`
+	Alias                             string    `json:"alias,omitempty"`
+	APIKey                            string    `json:"api_key,omitempty"`
+	SessionID                         string    `json:"session_id,omitempty"`
+	ParentSessionID                   string    `json:"parent_session_id,omitempty"`
+	AuthID                            string    `json:"auth_id,omitempty"`
+	AuthIndex                         string    `json:"auth_index,omitempty"`
+	AuthType                          string    `json:"auth_type,omitempty"`
+	Source                            string    `json:"source,omitempty"`
+	ReasoningEffort                   string    `json:"reasoning_effort,omitempty"`
+	ServiceTier                       string    `json:"service_tier,omitempty"`
+	Generate                          bool      `json:"generate"`
+	RequestedAt                       time.Time `json:"requested_at"`
+	LatencyMs                         int64     `json:"latency_ms"`
+	TTFTMs                            int64     `json:"ttft_ms"`
+	Failed                            bool      `json:"failed"`
+	FailureStatusCode                 int       `json:"failure_status_code,omitempty"`
+	FailureBody                       string    `json:"failure_body,omitempty"`
+	FailSummary                       string    `json:"fail_summary,omitempty"`
+	HeaderErrorKind                   string    `json:"header_error_kind,omitempty"`
+	HeaderErrorCode                   string    `json:"header_error_code,omitempty"`
+	HeaderTraceID                     string    `json:"header_trace_id,omitempty"`
+	HeaderQuotaRecoverAtMS            int64     `json:"header_quota_recover_at_ms,omitempty"`
+	HeaderQuotaUsedPercent            *float64  `json:"header_quota_used_percent,omitempty"`
+	HeaderQuotaWindowMinutes          *float64  `json:"header_quota_window_minutes,omitempty"`
+	HeaderSecondaryQuotaRecoverAtMS   int64     `json:"header_secondary_quota_recover_at_ms,omitempty"`
+	HeaderSecondaryQuotaUsedPercent   *float64  `json:"header_secondary_quota_used_percent,omitempty"`
+	HeaderSecondaryQuotaWindowMinutes *float64  `json:"header_secondary_quota_window_minutes,omitempty"`
+	RateLimitReachedType              string    `json:"rate_limit_reached_type,omitempty"`
+	PlanType                          string    `json:"plan_type,omitempty"`
+	ResponseModel                     string    `json:"response_model,omitempty"`
+	ModelMismatch                     bool      `json:"model_mismatch,omitempty"`
+	InputTokens                       int64     `json:"input_tokens"`
+	OutputTokens                      int64     `json:"output_tokens"`
+	ReasoningTokens                   int64     `json:"reasoning_tokens"`
+	CachedTokens                      int64     `json:"cached_tokens"`
+	CacheReadTokens                   int64     `json:"cache_read_tokens"`
+	CacheCreationTokens               int64     `json:"cache_creation_tokens"`
+	TotalTokens                       int64     `json:"total_tokens"`
+	InputCost                         float64   `json:"input_cost"`
+	OutputCost                        float64   `json:"output_cost"`
+	CacheReadCost                     float64   `json:"cache_read_cost"`
+	CacheCreationCost                 float64   `json:"cache_creation_cost"`
+	TotalCost                         float64   `json:"total_cost"`
+	MatchedModel                      string    `json:"matched_model,omitempty"`
 }
 
 // QueryFilter defines filtering criteria for aggregation queries.
@@ -240,14 +243,28 @@ type AccountHealthResponse struct {
 }
 
 // AccountQuotaWindowDetail holds timing and usage metrics for a specific quota window.
+// AccountQuotaForecast is a conservative estimate derived from recent quota
+// percentage observations for the same account and window. A forecast is
+// explicitly unavailable when the observations are too sparse, stale, or span
+// an ambiguous reset boundary.
+type AccountQuotaForecast struct {
+	Status                      string  `json:"status"` // available, after_reset, exhausted, insufficient_data
+	EstimatedExhaustionAtMS     int64   `json:"estimated_exhaustion_at_ms,omitempty"`
+	EstimatedExhaustionAfterSec int64   `json:"estimated_exhaustion_after_seconds,omitempty"`
+	BurnRatePercentPerHour      float64 `json:"burn_rate_percent_per_hour,omitempty"`
+	SampleCount                 int     `json:"sample_count"`
+}
+
+// AccountQuotaWindowDetail holds timing and usage metrics for a specific quota window.
 type AccountQuotaWindowDetail struct {
-	WindowKind       string   `json:"window_kind"` // five_hour, weekly, monthly, unknown
-	DurationSeconds  int64    `json:"duration_seconds"`
-	UsedPercent      *float64 `json:"used_percent,omitempty"`
-	RemainingPercent *float64 `json:"remaining_percent,omitempty"`
-	ResetAtMS        int64    `json:"reset_at_ms,omitempty"`
-	ResetAfterSec    int64    `json:"reset_after_seconds,omitempty"`
-	IsExhausted      bool     `json:"is_exhausted"`
+	WindowKind       string                `json:"window_kind"` // five_hour, weekly, monthly, unknown
+	DurationSeconds  int64                 `json:"duration_seconds"`
+	UsedPercent      *float64              `json:"used_percent,omitempty"`
+	RemainingPercent *float64              `json:"remaining_percent,omitempty"`
+	ResetAtMS        int64                 `json:"reset_at_ms,omitempty"`
+	ResetAfterSec    int64                 `json:"reset_after_seconds,omitempty"`
+	IsExhausted      bool                  `json:"is_exhausted"`
+	Forecast         *AccountQuotaForecast `json:"forecast,omitempty"`
 }
 
 // AccountQuotaDetail represents quota snapshots and rate limit windows for an account.
@@ -260,6 +277,8 @@ type AccountQuotaDetail struct {
 	SecondaryWindow          *AccountQuotaWindowDetail `json:"secondary_window,omitempty"`
 	SummaryUsedPercent       *float64                  `json:"summary_used_percent,omitempty"`
 	SummaryRecoverAtMS       int64                     `json:"summary_recover_at_ms,omitempty"`
+	ReachedWindowKind        string                    `json:"reached_window_kind,omitempty"`
+	ReachedWindowSource      string                    `json:"reached_window_source,omitempty"`
 	CooldownRemainingSeconds int64                     `json:"cooldown_remaining_seconds"`
 	InCooldown               bool                      `json:"in_cooldown"`
 	TotalTokensRecent        int64                     `json:"total_tokens_recent"`

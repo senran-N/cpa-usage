@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -114,6 +115,13 @@ func TestEvaluateAccountHealth(t *testing.T) {
 	if h5.QuotaUsedPercent == nil || *h5.QuotaUsedPercent != 0.0 {
 		t.Errorf("expected negative percent clamped to 0, got %v", h5.QuotaUsedPercent)
 	}
+	for _, invalid := range []float64{math.Inf(1), math.Inf(-1), math.NaN()} {
+		rec5.HeaderQuotaUsedPercent = &invalid
+		hInvalid := EvaluateAccountHealth(stat1, rec5, now)
+		if hInvalid.QuotaUsedPercent == nil || *hInvalid.QuotaUsedPercent != 0.0 {
+			t.Errorf("expected non-finite percent clamped to 0, got %v", hInvalid.QuotaUsedPercent)
+		}
+	}
 
 	// 6. Reauth needed (401 / invalid_grant / token_expired)
 	stat6 := &AuthStat{
@@ -189,6 +197,9 @@ func TestEvaluateAccountQuota(t *testing.T) {
 	if q.PrimaryWindow == nil {
 		t.Fatalf("expected PrimaryWindow not nil")
 	}
+	if q.PrimaryWindow.WindowKind != "five_hour" || q.PrimaryWindow.DurationSeconds != 18000 {
+		t.Errorf("expected legacy primary five_hour/18000, got %s/%d", q.PrimaryWindow.WindowKind, q.PrimaryWindow.DurationSeconds)
+	}
 	if *q.PrimaryWindow.UsedPercent != 80.0 {
 		t.Errorf("expected primary used 80, got %v", *q.PrimaryWindow.UsedPercent)
 	}
@@ -205,6 +216,9 @@ func TestEvaluateAccountQuota(t *testing.T) {
 	if q.SecondaryWindow == nil {
 		t.Fatalf("expected SecondaryWindow not nil")
 	}
+	if q.SecondaryWindow.WindowKind != "weekly" || q.SecondaryWindow.DurationSeconds != 604800 {
+		t.Errorf("expected legacy secondary weekly/604800, got %s/%d", q.SecondaryWindow.WindowKind, q.SecondaryWindow.DurationSeconds)
+	}
 	if *q.SecondaryWindow.UsedPercent != 40.0 {
 		t.Errorf("expected secondary used 40, got %v", *q.SecondaryWindow.UsedPercent)
 	}
@@ -220,6 +234,52 @@ func TestEvaluateAccountQuota(t *testing.T) {
 	}
 	if q.CooldownRemainingSeconds != 3600 {
 		t.Errorf("expected cooldown remaining 3600s, got %d", q.CooldownRemainingSeconds)
+	}
+}
+
+func TestGetAccountsQuotaIncludesForecastFromStoredObservations(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "cpa-usage-forecast-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	store, err := Open(filepath.Join(tempDir, "forecast.db"))
+	if err != nil {
+		t.Fatalf("failed to open storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Date(2026, 3, 30, 12, 0, 0, 0, time.UTC)
+	resetAt := now.Add(4 * time.Hour).UnixMilli()
+	records := make([]*Record, 0, 3)
+	for i, used := range []float64{20, 35, 50} {
+		usedPtr := used
+		minutes := 300.0
+		records = append(records, &Record{
+			AuthID:                   "forecast-auth",
+			Provider:                 "codex",
+			Model:                    "gpt-5-codex",
+			RequestedAt:              now.Add(time.Duration(i-3) * time.Hour),
+			HeaderQuotaRecoverAtMS:   resetAt,
+			HeaderQuotaUsedPercent:   &usedPtr,
+			HeaderQuotaWindowMinutes: &minutes,
+		})
+	}
+	if err := store.BatchInsertRecords(records); err != nil {
+		t.Fatalf("failed to insert forecast records: %v", err)
+	}
+
+	response, err := store.GetAccountsQuota(QueryFilter{}, now)
+	if err != nil {
+		t.Fatalf("GetAccountsQuota failed: %v", err)
+	}
+	if len(response.Quotas) != 1 || response.Quotas[0].PrimaryWindow == nil {
+		t.Fatalf("quota response = %#v", response)
+	}
+	forecast := response.Quotas[0].PrimaryWindow.Forecast
+	if forecast == nil || forecast.Status != "available" || forecast.SampleCount != 3 {
+		t.Fatalf("forecast = %#v", forecast)
 	}
 }
 

@@ -2838,6 +2838,29 @@
       renderAuthsTable();
     };
 
+    function formatQuotaForecast(forecast) {
+      if (!forecast) return '';
+      if (forecast.status === 'available' && forecast.estimated_exhaustion_after_seconds > 0) {
+        const seconds = forecast.estimated_exhaustion_after_seconds;
+        let text;
+        if (seconds >= 86400) {
+          text = `${Math.floor(seconds / 86400)}天${Math.ceil((seconds % 86400) / 3600)}小时`;
+        } else if (seconds >= 3600) {
+          text = `${Math.floor(seconds / 3600)}小时${Math.ceil((seconds % 3600) / 60)}分钟`;
+        } else {
+          text = `${Math.ceil(seconds / 60)}分钟`;
+        }
+        return `<div style="font-size: 10.5px; color: var(--text-secondary);" title="基于 ${forecast.sample_count || 0} 个配额观测，最高消耗速率 ${Number(forecast.burn_rate_percent_per_hour || 0).toFixed(1)}%/小时">预计 ${esc(text)} 后耗尽</div>`;
+      }
+      if (forecast.status === 'exhausted') {
+        return '<div style="font-size: 10.5px; color: var(--error-color);">已耗尽</div>';
+      }
+      if (forecast.status === 'after_reset') {
+        return '<div style="font-size: 10.5px; color: var(--text-tertiary);">预计将在重置后耗尽</div>';
+      }
+      return '<div style="font-size: 10.5px; color: var(--text-tertiary);">暂无足够历史</div>';
+    }
+
     function renderAuthsTable() {
       updateSortIndicators('auths');
       const tbody = document.getElementById('authsTableBody');
@@ -2917,6 +2940,7 @@
             <div style="font-size: 11.5px; font-family: var(--font-mono);">已用 ${used.toFixed(1)}%</div>
             <div class="progress-track"><div class="progress-fill ${colorClass}" style="width: ${Math.min(used, 100)}%;"></div></div>
             ${extraHint}
+            ${formatQuotaForecast(a.primary_window.forecast)}
           `;
         }
 
@@ -2931,6 +2955,7 @@
           secQuotaHtml = `
             <div style="font-size: 11.5px; font-family: var(--font-mono);">已用 ${used.toFixed(1)}%</div>
             <div class="progress-track"><div class="progress-fill ${colorClass}" style="width: ${Math.min(used, 100)}%;"></div></div>
+            ${formatQuotaForecast(a.secondary_window.forecast)}
           `;
         }
 

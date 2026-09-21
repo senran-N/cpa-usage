@@ -3,6 +3,7 @@ package storage
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"time"
@@ -100,6 +101,10 @@ func (s *Storage) GetAccountsQuota(filter QueryFilter, now time.Time) (*AccountQ
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch latest records: %w", err)
 	}
+	observations, err := s.fetchQuotaObservations(filter, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch quota observations: %w", err)
+	}
 
 	resp := &AccountQuotaResponse{
 		Quotas:        make([]AccountQuotaDetail, 0, len(authStats)),
@@ -109,6 +114,14 @@ func (s *Storage) GetAccountsQuota(filter QueryFilter, now time.Time) (*AccountQ
 	for _, stat := range authStats {
 		latestRec := latestMap[stat.AuthID]
 		q := EvaluateAccountQuota(stat, latestRec, now)
+		if accountObservations := observations[stat.AuthID]; accountObservations != nil {
+			if q.PrimaryWindow != nil {
+				q.PrimaryWindow.Forecast = buildQuotaForecast(q.PrimaryWindow, accountObservations.Primary, now)
+			}
+			if q.SecondaryWindow != nil {
+				q.SecondaryWindow.Forecast = buildQuotaForecast(q.SecondaryWindow, accountObservations.Secondary, now)
+			}
+		}
 		resp.Quotas = append(resp.Quotas, q)
 	}
 
@@ -308,85 +321,30 @@ func EvaluateAccountQuota(stat *AuthStat, latestRec *Record, now time.Time) Acco
 	q.PlanType = latestRec.PlanType
 	q.LastObservedAt = latestRec.RequestedAt
 
-	// Primary Window (default 5-hour)
-	var primWindow *AccountQuotaWindowDetail
-	if latestRec.HeaderQuotaUsedPercent != nil || latestRec.HeaderQuotaRecoverAtMS > 0 {
-		primUsed := clampPercent(latestRec.HeaderQuotaUsedPercent)
-		var primRem *float64
-		isExhausted := false
-		if primUsed != nil {
-			rem := 100.0 - *primUsed
-			if rem < 0 {
-				rem = 0
-			}
-			primRem = &rem
-			if *primUsed >= 100.0 {
-				isExhausted = true
-			}
-		}
-
-		var primResetSec int64
-		if latestRec.HeaderQuotaRecoverAtMS > nowMS {
-			primResetSec = (latestRec.HeaderQuotaRecoverAtMS - nowMS + 999) / 1000
-		}
-
-		primWindow = &AccountQuotaWindowDetail{
-			WindowKind:       "five_hour",
-			DurationSeconds:  18000,
-			UsedPercent:      primUsed,
-			RemainingPercent: primRem,
-			ResetAtMS:        latestRec.HeaderQuotaRecoverAtMS,
-			ResetAfterSec:    primResetSec,
-			IsExhausted:      isExhausted,
-		}
-	}
+	// Window metadata is supplied by Codex headers. Legacy records without window
+	// minutes retain the historical primary/secondary defaults for compatibility.
+	primWindow := buildQuotaWindow(latestRec.HeaderQuotaUsedPercent, latestRec.HeaderQuotaRecoverAtMS, latestRec.HeaderQuotaWindowMinutes, "five_hour", nowMS)
+	secWindow := buildQuotaWindow(latestRec.HeaderSecondaryQuotaUsedPercent, latestRec.HeaderSecondaryQuotaRecoverAtMS, latestRec.HeaderSecondaryQuotaWindowMinutes, "weekly", nowMS)
 	q.PrimaryWindow = primWindow
-
-	// Secondary Window (default weekly)
-	var secWindow *AccountQuotaWindowDetail
-	if latestRec.HeaderSecondaryQuotaUsedPercent != nil || latestRec.HeaderSecondaryQuotaRecoverAtMS > 0 {
-		secUsed := clampPercent(latestRec.HeaderSecondaryQuotaUsedPercent)
-		var secRem *float64
-		isExhausted := false
-		if secUsed != nil {
-			rem := 100.0 - *secUsed
-			if rem < 0 {
-				rem = 0
-			}
-			secRem = &rem
-			if *secUsed >= 100.0 {
-				isExhausted = true
-			}
-		}
-
-		var secResetSec int64
-		if latestRec.HeaderSecondaryQuotaRecoverAtMS > nowMS {
-			secResetSec = (latestRec.HeaderSecondaryQuotaRecoverAtMS - nowMS + 999) / 1000
-		}
-
-		secWindow = &AccountQuotaWindowDetail{
-			WindowKind:       "weekly",
-			DurationSeconds:  604800,
-			UsedPercent:      secUsed,
-			RemainingPercent: secRem,
-			ResetAtMS:        latestRec.HeaderSecondaryQuotaRecoverAtMS,
-			ResetAfterSec:    secResetSec,
-			IsExhausted:      isExhausted,
-		}
-	}
 	q.SecondaryWindow = secWindow
 
-	// Summary values
-	q.SummaryUsedPercent = q.PrimaryWindow.GetUsedPercent()
-	if q.SecondaryWindow != nil && q.SecondaryWindow.UsedPercent != nil {
-		if q.SummaryUsedPercent == nil || *q.SecondaryWindow.UsedPercent > *q.SummaryUsedPercent {
-			q.SummaryUsedPercent = q.SecondaryWindow.UsedPercent
-		}
+	// Summary values must come from one selected window so usage, reset, and
+	// cooldown cannot describe different windows.
+	if selected := selectQuotaSummaryWindow(primWindow, secWindow); selected != nil {
+		q.SummaryUsedPercent = selected.UsedPercent
+		q.SummaryRecoverAtMS = selected.ResetAtMS
 	}
 
-	q.SummaryRecoverAtMS = latestRec.HeaderQuotaRecoverAtMS
-	if q.SummaryRecoverAtMS <= 0 && latestRec.HeaderSecondaryQuotaRecoverAtMS > 0 {
-		q.SummaryRecoverAtMS = latestRec.HeaderSecondaryQuotaRecoverAtMS
+	if reached := selectQuotaReachedWindow(latestRec, primWindow, secWindow); reached != nil {
+		q.ReachedWindowKind = reached.WindowKind
+		if reached == primWindow {
+			q.ReachedWindowSource = "primary"
+		} else {
+			q.ReachedWindowSource = "secondary"
+		}
+		if q.SummaryRecoverAtMS <= 0 {
+			q.SummaryRecoverAtMS = reached.ResetAtMS
+		}
 	}
 
 	if q.SummaryRecoverAtMS > nowMS {
@@ -400,12 +358,192 @@ func EvaluateAccountQuota(stat *AuthStat, latestRec *Record, now time.Time) Acco
 	return q
 }
 
-// GetUsedPercent safely returns pointer to used percent or nil.
-func (w *AccountQuotaWindowDetail) GetUsedPercent() *float64 {
-	if w == nil {
+func buildQuotaWindow(used *float64, resetAtMS int64, windowMinutes *float64, legacyKind string, nowMS int64) *AccountQuotaWindowDetail {
+	if used == nil && resetAtMS <= 0 && windowMinutes == nil {
 		return nil
 	}
-	return w.UsedPercent
+
+	windowKind := legacyKind
+	durationSeconds := int64(0)
+	if legacyKind == "five_hour" {
+		durationSeconds = 5 * 60 * 60
+	} else if legacyKind == "weekly" {
+		durationSeconds = 7 * 24 * 60 * 60
+	}
+	if windowMinutes != nil && isFiniteWindowMinutes(*windowMinutes) {
+		windowKind = classifyQuotaWindow(*windowMinutes)
+		durationSeconds = int64(*windowMinutes * 60)
+	}
+
+	clampedUsed := clampPercent(used)
+	var remaining *float64
+	isExhausted := false
+	if clampedUsed != nil {
+		value := 100.0 - *clampedUsed
+		if value < 0 {
+			value = 0
+		}
+		remaining = &value
+		isExhausted = *clampedUsed >= 100
+	}
+
+	var resetAfterSec int64
+	if resetAtMS > nowMS {
+		resetAfterSec = (resetAtMS - nowMS + 999) / 1000
+	}
+	return &AccountQuotaWindowDetail{
+		WindowKind:       windowKind,
+		DurationSeconds:  durationSeconds,
+		UsedPercent:      clampedUsed,
+		RemainingPercent: remaining,
+		ResetAtMS:        resetAtMS,
+		ResetAfterSec:    resetAfterSec,
+		IsExhausted:      isExhausted,
+	}
+}
+
+func isFiniteWindowMinutes(minutes float64) bool {
+	return !math.IsNaN(minutes) && !math.IsInf(minutes, 0) && minutes > 0
+}
+
+func classifyQuotaWindow(minutes float64) string {
+	switch {
+	case math.Abs(minutes-300) < 0.001:
+		return "five_hour"
+	case math.Abs(minutes-10080) < 0.001:
+		return "weekly"
+	case minutes >= 28*24*60 && minutes <= 31*24*60:
+		return "monthly"
+	default:
+		return "unknown"
+	}
+}
+
+func selectQuotaSummaryWindow(windows ...*AccountQuotaWindowDetail) *AccountQuotaWindowDetail {
+	var selected *AccountQuotaWindowDetail
+	for _, window := range windows {
+		if window == nil || window.UsedPercent == nil {
+			continue
+		}
+		if selected == nil || *window.UsedPercent > *selected.UsedPercent ||
+			(*window.UsedPercent == *selected.UsedPercent && window.ResetAtMS > selected.ResetAtMS) {
+			selected = window
+		}
+	}
+	if selected != nil {
+		return selected
+	}
+
+	// A 429 may provide only a reset time. Keep cooldown information useful
+	// without inventing a usage percentage; choose the latest reset window.
+	for _, window := range windows {
+		if window == nil || window.ResetAtMS <= 0 {
+			continue
+		}
+		if selected == nil || window.ResetAtMS > selected.ResetAtMS {
+			selected = window
+		}
+	}
+	return selected
+}
+
+func selectQuotaReachedWindow(rec *Record, windows ...*AccountQuotaWindowDetail) *AccountQuotaWindowDetail {
+	if rec != nil {
+		switch strings.ToLower(strings.TrimSpace(rec.RateLimitReachedType)) {
+		case "primary":
+			if len(windows) > 0 && windows[0] != nil {
+				return windows[0]
+			}
+		case "secondary":
+			if len(windows) > 1 && windows[1] != nil {
+				return windows[1]
+			}
+		}
+	}
+
+	var selected *AccountQuotaWindowDetail
+	for _, window := range windows {
+		if window == nil || !window.IsExhausted {
+			continue
+		}
+		if selected == nil || window.ResetAtMS > selected.ResetAtMS {
+			selected = window
+		}
+	}
+	return selected
+}
+
+func (s *Storage) fetchQuotaObservations(filter QueryFilter, now time.Time) (map[string]*accountQuotaObservations, error) {
+	where, args := buildWhereClause(filter)
+	if where == "" {
+		where = " WHERE auth_id != '' AND requested_at_unix >= ? AND requested_at_unix <= ? "
+	} else {
+		where += " AND auth_id != '' AND requested_at_unix >= ? AND requested_at_unix <= ? "
+	}
+	args = append(args, now.Add(-quotaForecastLookback).Unix(), now.Unix())
+
+	query := `
+		SELECT
+			auth_id, requested_at_unix,
+			header_quota_recover_at_ms, header_quota_used_percent, header_quota_window_minutes,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, header_secondary_quota_window_minutes
+		FROM usage_records
+		` + where + `
+		ORDER BY auth_id ASC, requested_at_unix ASC, id ASC
+	`
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query quota observations: %w", err)
+	}
+	defer rows.Close()
+
+	observations := make(map[string]*accountQuotaObservations)
+	for rows.Next() {
+		var authID string
+		var requestedAtUnix, primaryReset, secondaryReset int64
+		var primaryUsed, primaryMinutes, secondaryUsed, secondaryMinutes sql.NullFloat64
+		if err := rows.Scan(
+			&authID, &requestedAtUnix,
+			&primaryReset, &primaryUsed, &primaryMinutes,
+			&secondaryReset, &secondaryUsed, &secondaryMinutes,
+		); err != nil {
+			return nil, err
+		}
+		if requestedAtUnix <= 0 || authID == "" {
+			continue
+		}
+
+		account := observations[authID]
+		if account == nil {
+			account = &accountQuotaObservations{}
+			observations[authID] = account
+		}
+		if primaryUsed.Valid && primaryReset > 0 && isFinitePercent(primaryUsed.Float64) {
+			kind := "five_hour"
+			if primaryMinutes.Valid && isFiniteWindowMinutes(primaryMinutes.Float64) {
+				kind = classifyQuotaWindow(primaryMinutes.Float64)
+			}
+			account.addPrimary(quotaObservation{
+				At:         time.Unix(requestedAtUnix, 0).UTC(),
+				Used:       clampFinitePercent(primaryUsed.Float64),
+				ResetAtMS:  primaryReset,
+				WindowKind: kind,
+			})
+		}
+		if secondaryUsed.Valid && secondaryReset > 0 && isFinitePercent(secondaryUsed.Float64) {
+			kind := "weekly"
+			if secondaryMinutes.Valid && isFiniteWindowMinutes(secondaryMinutes.Float64) {
+				kind = classifyQuotaWindow(secondaryMinutes.Float64)
+			}
+			account.addSecondary(quotaObservation{
+				At:         time.Unix(requestedAtUnix, 0).UTC(),
+				Used:       clampFinitePercent(secondaryUsed.Float64),
+				ResetAtMS:  secondaryReset,
+				WindowKind: kind,
+			})
+		}
+	}
+	return observations, rows.Err()
 }
 
 func (s *Storage) fetchLatestRecordsForAccounts(filter QueryFilter) (map[string]*Record, error) {
@@ -423,8 +561,9 @@ func (s *Storage) fetchLatestRecordsForAccounts(filter QueryFilter) (map[string]
 			r.auth_type, r.source, r.reasoning_effort, r.service_tier, r.generate,
 			r.requested_at, r.latency_ms, r.ttft_ms, r.failed,
 			r.failure_status_code, r.failure_body, r.fail_summary, r.header_error_kind, r.header_error_code,
-			r.header_trace_id, r.header_quota_recover_at_ms, r.header_quota_used_percent,
-			r.header_secondary_quota_recover_at_ms, r.header_secondary_quota_used_percent, r.plan_type,
+			r.header_trace_id, r.header_quota_recover_at_ms, r.header_quota_used_percent, r.header_quota_window_minutes,
+			r.header_secondary_quota_recover_at_ms, r.header_secondary_quota_used_percent, r.header_secondary_quota_window_minutes,
+			r.rate_limit_reached_type, r.plan_type,
 			r.input_tokens, r.output_tokens, r.reasoning_tokens,
 			r.cached_tokens, r.cache_read_tokens, r.cache_creation_tokens, r.total_tokens,
 			r.input_cost, r.output_cost, r.cache_read_cost, r.cache_creation_cost, r.total_cost,
@@ -449,8 +588,8 @@ func (s *Storage) fetchLatestRecordsForAccounts(filter QueryFilter) (map[string]
 		r := &Record{}
 		var genInt, failedInt int
 		var reqAtStr string
-		var quotaUsedPct, secQuotaUsedPct sql.NullFloat64
-		var failSummary, headerErrorKind, headerErrorCode, headerTraceID, planType sql.NullString
+		var quotaUsedPct, quotaWindowMinutes, secQuotaUsedPct, secQuotaWindowMinutes sql.NullFloat64
+		var failSummary, headerErrorKind, headerErrorCode, headerTraceID, reachedType, planType sql.NullString
 
 		if err := rows.Scan(
 			&r.ID, &r.Provider, &r.BaseURL, &r.ExecutorType, &r.Model, &r.Alias,
@@ -458,8 +597,9 @@ func (s *Storage) fetchLatestRecordsForAccounts(filter QueryFilter) (map[string]
 			&r.AuthType, &r.Source, &r.ReasoningEffort, &r.ServiceTier, &genInt,
 			&reqAtStr, &r.LatencyMs, &r.TTFTMs, &failedInt,
 			&r.FailureStatusCode, &r.FailureBody, &failSummary, &headerErrorKind, &headerErrorCode,
-			&headerTraceID, &r.HeaderQuotaRecoverAtMS, &quotaUsedPct,
-			&r.HeaderSecondaryQuotaRecoverAtMS, &secQuotaUsedPct, &planType,
+			&headerTraceID, &r.HeaderQuotaRecoverAtMS, &quotaUsedPct, &quotaWindowMinutes,
+			&r.HeaderSecondaryQuotaRecoverAtMS, &secQuotaUsedPct, &secQuotaWindowMinutes,
+			&reachedType, &planType,
 			&r.InputTokens, &r.OutputTokens, &r.ReasoningTokens,
 			&r.CachedTokens, &r.CacheReadTokens, &r.CacheCreationTokens, &r.TotalTokens,
 			&r.InputCost, &r.OutputCost, &r.CacheReadCost, &r.CacheCreationCost, &r.TotalCost,
@@ -485,8 +625,17 @@ func (s *Storage) fetchLatestRecordsForAccounts(filter QueryFilter) (map[string]
 		if quotaUsedPct.Valid {
 			r.HeaderQuotaUsedPercent = &quotaUsedPct.Float64
 		}
+		if quotaWindowMinutes.Valid {
+			r.HeaderQuotaWindowMinutes = &quotaWindowMinutes.Float64
+		}
 		if secQuotaUsedPct.Valid {
 			r.HeaderSecondaryQuotaUsedPercent = &secQuotaUsedPct.Float64
+		}
+		if secQuotaWindowMinutes.Valid {
+			r.HeaderSecondaryQuotaWindowMinutes = &secQuotaWindowMinutes.Float64
+		}
+		if reachedType.Valid {
+			r.RateLimitReachedType = reachedType.String
 		}
 		if planType.Valid {
 			r.PlanType = planType.String
@@ -534,9 +683,13 @@ func clampPercent(val *float64) *float64 {
 	if val == nil {
 		return nil
 	}
-	v := *val
-	if v < 0 {
-		v = 0
-	}
+	v := clampFinitePercent(*val)
 	return &v
+}
+
+func clampFinitePercent(value float64) float64 {
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 0 {
+		return 0
+	}
+	return value
 }

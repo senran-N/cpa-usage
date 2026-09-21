@@ -1,6 +1,7 @@
 package plugin
 
 import (
+	"math"
 	"net/http"
 	"net/mail"
 	"strconv"
@@ -10,15 +11,18 @@ import (
 
 // HeaderDerived contains metrics extracted from upstream HTTP response headers.
 type HeaderDerived struct {
-	ResponseModel             string   `json:"response_model,omitempty"`
-	QuotaRecoverAtMS          int64    `json:"quota_recover_at_ms,omitempty"`
-	QuotaUsedPercent          *float64 `json:"quota_used_percent,omitempty"`
-	SecondaryQuotaRecoverAtMS int64    `json:"secondary_quota_recover_at_ms,omitempty"`
-	SecondaryQuotaUsedPercent *float64 `json:"secondary_quota_used_percent,omitempty"`
-	PlanType                  string   `json:"plan_type,omitempty"`
-	ErrorKind                 string   `json:"error_kind,omitempty"`
-	ErrorCode                 string   `json:"error_code,omitempty"`
-	TraceID                   string   `json:"trace_id,omitempty"`
+	ResponseModel               string   `json:"response_model,omitempty"`
+	QuotaRecoverAtMS            int64    `json:"quota_recover_at_ms,omitempty"`
+	QuotaUsedPercent            *float64 `json:"quota_used_percent,omitempty"`
+	QuotaWindowMinutes          *float64 `json:"quota_window_minutes,omitempty"`
+	SecondaryQuotaRecoverAtMS   int64    `json:"secondary_quota_recover_at_ms,omitempty"`
+	SecondaryQuotaUsedPercent   *float64 `json:"secondary_quota_used_percent,omitempty"`
+	SecondaryQuotaWindowMinutes *float64 `json:"secondary_quota_window_minutes,omitempty"`
+	RateLimitReachedType        string   `json:"rate_limit_reached_type,omitempty"`
+	PlanType                    string   `json:"plan_type,omitempty"`
+	ErrorKind                   string   `json:"error_kind,omitempty"`
+	ErrorCode                   string   `json:"error_code,omitempty"`
+	TraceID                     string   `json:"trace_id,omitempty"`
 }
 
 // ParseResponseHeaders extracts useful diagnostics from upstream response headers.
@@ -135,6 +139,7 @@ func ParseResponseHeaders(headers http.Header, statusCode int, baseTime time.Tim
 		if pReset > 0 {
 			derived.QuotaRecoverAtMS = pReset
 		}
+		derived.QuotaWindowMinutes = parsePositiveHeaderFloat(headers.Get("X-Codex-Primary-Window-Minutes"))
 
 		// Secondary window
 		if sVal := strings.TrimSpace(headers.Get("X-Codex-Secondary-Used-Percent")); sVal != "" {
@@ -146,9 +151,11 @@ func ParseResponseHeaders(headers http.Header, statusCode int, baseTime time.Tim
 		if sReset > 0 {
 			derived.SecondaryQuotaRecoverAtMS = sReset
 		}
+		derived.SecondaryQuotaWindowMinutes = parsePositiveHeaderFloat(headers.Get("X-Codex-Secondary-Window-Minutes"))
 
 		// Rate limit reached window selection
 		reachedType := strings.ToLower(strings.TrimSpace(headers.Get("X-Codex-Rate-Limit-Reached-Type")))
+		derived.RateLimitReachedType = reachedType
 		if reachedType == "primary" && pReset > 0 {
 			derived.QuotaRecoverAtMS = pReset
 			derived.ErrorKind = "rate_limit"
@@ -179,6 +186,18 @@ func ParseResponseHeaders(headers http.Header, statusCode int, baseTime time.Tim
 	}
 
 	return derived
+}
+
+func parsePositiveHeaderFloat(value string) *float64 {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil || parsed <= 0 || math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+		return nil
+	}
+	return &parsed
 }
 
 func parseResetTime(resetAtStr, resetAfterStr string, baseTime time.Time) int64 {

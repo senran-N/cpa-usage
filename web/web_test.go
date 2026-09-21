@@ -29,6 +29,8 @@ func TestDashboardRendering(t *testing.T) {
 		"btnOpenCleanupModal",
 		"authHealthSummaryBanner",
 		"authsTableBody",
+		"formatQuotaForecast",
+		"estimated_exhaustion_after_seconds",
 		"pricesModal",
 		"syncPricesPanel",
 		"addPriceFormPanel",

@@ -128,8 +128,11 @@ func (s *Storage) initSchema() error {
 		header_trace_id TEXT DEFAULT '',
 		header_quota_recover_at_ms INTEGER DEFAULT 0,
 		header_quota_used_percent REAL DEFAULT NULL,
+		header_quota_window_minutes REAL DEFAULT NULL,
 		header_secondary_quota_recover_at_ms INTEGER DEFAULT 0,
 		header_secondary_quota_used_percent REAL DEFAULT NULL,
+		header_secondary_quota_window_minutes REAL DEFAULT NULL,
+		rate_limit_reached_type TEXT DEFAULT '',
 		plan_type TEXT DEFAULT '',
 		response_model TEXT DEFAULT '',
 		model_mismatch INTEGER DEFAULT 0,
@@ -213,8 +216,11 @@ func (s *Storage) migrateSchema() error {
 		{"header_trace_id", "ALTER TABLE usage_records ADD COLUMN header_trace_id TEXT DEFAULT ''"},
 		{"header_quota_recover_at_ms", "ALTER TABLE usage_records ADD COLUMN header_quota_recover_at_ms INTEGER DEFAULT 0"},
 		{"header_quota_used_percent", "ALTER TABLE usage_records ADD COLUMN header_quota_used_percent REAL DEFAULT NULL"},
+		{"header_quota_window_minutes", "ALTER TABLE usage_records ADD COLUMN header_quota_window_minutes REAL DEFAULT NULL"},
 		{"header_secondary_quota_recover_at_ms", "ALTER TABLE usage_records ADD COLUMN header_secondary_quota_recover_at_ms INTEGER DEFAULT 0"},
 		{"header_secondary_quota_used_percent", "ALTER TABLE usage_records ADD COLUMN header_secondary_quota_used_percent REAL DEFAULT NULL"},
+		{"header_secondary_quota_window_minutes", "ALTER TABLE usage_records ADD COLUMN header_secondary_quota_window_minutes REAL DEFAULT NULL"},
+		{"rate_limit_reached_type", "ALTER TABLE usage_records ADD COLUMN rate_limit_reached_type TEXT DEFAULT ''"},
 		{"plan_type", "ALTER TABLE usage_records ADD COLUMN plan_type TEXT DEFAULT ''"},
 		{"response_model", "ALTER TABLE usage_records ADD COLUMN response_model TEXT DEFAULT ''"},
 		{"model_mismatch", "ALTER TABLE usage_records ADD COLUMN model_mismatch INTEGER DEFAULT 0"},
@@ -338,8 +344,9 @@ func (s *Storage) BatchInsertRecords(records []*Record) error {
 			auth_type, source, reasoning_effort, service_tier, generate,
 			requested_at, requested_at_unix, latency_ms, ttft_ms, failed,
 			failure_status_code, failure_body, fail_summary, header_error_kind, header_error_code,
-			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent,
-			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, plan_type,
+			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent, header_quota_window_minutes,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, header_secondary_quota_window_minutes,
+			rate_limit_reached_type, plan_type,
 			response_model, model_mismatch,
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
@@ -351,13 +358,12 @@ func (s *Storage) BatchInsertRecords(records []*Record) error {
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?,
-			?, ?, ?,
-			?, ?,
+			?, ?, ?, ?,
+			?, ?, ?, ?,
 			?, ?, ?,
 			?, ?, ?, ?,
-			?, ?, ?, ?, ?,
-			?
+			?, ?, ?, ?,
+			?, ?, ?, ?, ?
 		)
 	`)
 	if err != nil {
@@ -390,8 +396,9 @@ func (s *Storage) BatchInsertRecords(records []*Record) error {
 			r.AuthType, r.Source, r.ReasoningEffort, r.ServiceTier, genInt,
 			reqAtUTC.Format("2006-01-02 15:04:05"), reqAtUTC.Unix(), r.LatencyMs, r.TTFTMs, failedInt,
 			r.FailureStatusCode, r.FailureBody, r.FailSummary, r.HeaderErrorKind, r.HeaderErrorCode,
-			r.HeaderTraceID, r.HeaderQuotaRecoverAtMS, r.HeaderQuotaUsedPercent,
-			r.HeaderSecondaryQuotaRecoverAtMS, r.HeaderSecondaryQuotaUsedPercent, r.PlanType,
+			r.HeaderTraceID, r.HeaderQuotaRecoverAtMS, r.HeaderQuotaUsedPercent, r.HeaderQuotaWindowMinutes,
+			r.HeaderSecondaryQuotaRecoverAtMS, r.HeaderSecondaryQuotaUsedPercent, r.HeaderSecondaryQuotaWindowMinutes,
+			r.RateLimitReachedType, r.PlanType,
 			r.ResponseModel, mismatchInt,
 			r.InputTokens, r.OutputTokens, r.ReasoningTokens,
 			r.CachedTokens, r.CacheReadTokens, r.CacheCreationTokens, r.TotalTokens,
@@ -728,8 +735,9 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 			auth_type, source, reasoning_effort, service_tier, generate,
 			requested_at, latency_ms, ttft_ms, failed,
 			failure_status_code, failure_body, fail_summary, header_error_kind, header_error_code,
-			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent,
-			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, plan_type,
+			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent, header_quota_window_minutes,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, header_secondary_quota_window_minutes,
+			rate_limit_reached_type, plan_type,
 			response_model, model_mismatch,
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
@@ -753,8 +761,8 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 		r := &Record{}
 		var genInt, failedInt, mismatchInt int
 		var reqAtStr string
-		var quotaUsedPct, secQuotaUsedPct sql.NullFloat64
-		var failSummary, headerErrorKind, headerErrorCode, headerTraceID, planType, respModel sql.NullString
+		var quotaUsedPct, quotaWindowMinutes, secQuotaUsedPct, secQuotaWindowMinutes sql.NullFloat64
+		var failSummary, headerErrorKind, headerErrorCode, headerTraceID, reachedType, planType, respModel sql.NullString
 
 		if err := rows.Scan(
 			&r.ID, &r.Provider, &r.BaseURL, &r.ExecutorType, &r.Model, &r.Alias,
@@ -762,8 +770,9 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 			&r.AuthType, &r.Source, &r.ReasoningEffort, &r.ServiceTier, &genInt,
 			&reqAtStr, &r.LatencyMs, &r.TTFTMs, &failedInt,
 			&r.FailureStatusCode, &r.FailureBody, &failSummary, &headerErrorKind, &headerErrorCode,
-			&headerTraceID, &r.HeaderQuotaRecoverAtMS, &quotaUsedPct,
-			&r.HeaderSecondaryQuotaRecoverAtMS, &secQuotaUsedPct, &planType,
+			&headerTraceID, &r.HeaderQuotaRecoverAtMS, &quotaUsedPct, &quotaWindowMinutes,
+			&r.HeaderSecondaryQuotaRecoverAtMS, &secQuotaUsedPct, &secQuotaWindowMinutes,
+			&reachedType, &planType,
 			&respModel, &mismatchInt,
 			&r.InputTokens, &r.OutputTokens, &r.ReasoningTokens,
 			&r.CachedTokens, &r.CacheReadTokens, &r.CacheCreationTokens, &r.TotalTokens,
@@ -794,8 +803,17 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 		if quotaUsedPct.Valid {
 			r.HeaderQuotaUsedPercent = &quotaUsedPct.Float64
 		}
+		if quotaWindowMinutes.Valid {
+			r.HeaderQuotaWindowMinutes = &quotaWindowMinutes.Float64
+		}
 		if secQuotaUsedPct.Valid {
 			r.HeaderSecondaryQuotaUsedPercent = &secQuotaUsedPct.Float64
+		}
+		if secQuotaWindowMinutes.Valid {
+			r.HeaderSecondaryQuotaWindowMinutes = &secQuotaWindowMinutes.Float64
+		}
+		if reachedType.Valid {
+			r.RateLimitReachedType = reachedType.String
 		}
 		if planType.Valid {
 			r.PlanType = planType.String
@@ -1221,8 +1239,9 @@ func (s *Storage) ExportRecords(filter QueryFilter, limit int) ([]*Record, error
 			auth_type, source, reasoning_effort, service_tier, generate,
 			requested_at, latency_ms, ttft_ms, failed,
 			failure_status_code, failure_body, fail_summary, header_error_kind, header_error_code,
-			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent,
-			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, plan_type,
+			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent, header_quota_window_minutes,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, header_secondary_quota_window_minutes,
+			rate_limit_reached_type, plan_type,
 			response_model, model_mismatch,
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
@@ -1246,8 +1265,8 @@ func (s *Storage) ExportRecords(filter QueryFilter, limit int) ([]*Record, error
 		r := &Record{}
 		var genInt, failedInt, mismatchInt int
 		var reqAtStr string
-		var quotaUsedPct, secQuotaUsedPct sql.NullFloat64
-		var failSummary, headerErrorKind, headerErrorCode, headerTraceID, planType, respModel sql.NullString
+		var quotaUsedPct, quotaWindowMinutes, secQuotaUsedPct, secQuotaWindowMinutes sql.NullFloat64
+		var failSummary, headerErrorKind, headerErrorCode, headerTraceID, reachedType, planType, respModel sql.NullString
 
 		if err := rows.Scan(
 			&r.ID, &r.Provider, &r.BaseURL, &r.ExecutorType, &r.Model, &r.Alias,
@@ -1255,8 +1274,9 @@ func (s *Storage) ExportRecords(filter QueryFilter, limit int) ([]*Record, error
 			&r.AuthType, &r.Source, &r.ReasoningEffort, &r.ServiceTier, &genInt,
 			&reqAtStr, &r.LatencyMs, &r.TTFTMs, &failedInt,
 			&r.FailureStatusCode, &r.FailureBody, &failSummary, &headerErrorKind, &headerErrorCode,
-			&headerTraceID, &r.HeaderQuotaRecoverAtMS, &quotaUsedPct,
-			&r.HeaderSecondaryQuotaRecoverAtMS, &secQuotaUsedPct, &planType,
+			&headerTraceID, &r.HeaderQuotaRecoverAtMS, &quotaUsedPct, &quotaWindowMinutes,
+			&r.HeaderSecondaryQuotaRecoverAtMS, &secQuotaUsedPct, &secQuotaWindowMinutes,
+			&reachedType, &planType,
 			&respModel, &mismatchInt,
 			&r.InputTokens, &r.OutputTokens, &r.ReasoningTokens,
 			&r.CachedTokens, &r.CacheReadTokens, &r.CacheCreationTokens, &r.TotalTokens,
@@ -1287,8 +1307,17 @@ func (s *Storage) ExportRecords(filter QueryFilter, limit int) ([]*Record, error
 		if quotaUsedPct.Valid {
 			r.HeaderQuotaUsedPercent = &quotaUsedPct.Float64
 		}
+		if quotaWindowMinutes.Valid {
+			r.HeaderQuotaWindowMinutes = &quotaWindowMinutes.Float64
+		}
 		if secQuotaUsedPct.Valid {
 			r.HeaderSecondaryQuotaUsedPercent = &secQuotaUsedPct.Float64
+		}
+		if secQuotaWindowMinutes.Valid {
+			r.HeaderSecondaryQuotaWindowMinutes = &secQuotaWindowMinutes.Float64
+		}
+		if reachedType.Valid {
+			r.RateLimitReachedType = reachedType.String
 		}
 		if planType.Valid {
 			r.PlanType = planType.String
@@ -1340,8 +1369,9 @@ func (s *Storage) ImportRecords(records []*Record) (int, int, error) {
 			auth_type, source, reasoning_effort, service_tier, generate,
 			requested_at, requested_at_unix, latency_ms, ttft_ms, failed,
 			failure_status_code, failure_body, fail_summary, header_error_kind, header_error_code,
-			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent,
-			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, plan_type,
+			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent, header_quota_window_minutes,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, header_secondary_quota_window_minutes,
+			rate_limit_reached_type, plan_type,
 			response_model, model_mismatch,
 			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
@@ -1353,10 +1383,8 @@ func (s *Storage) ImportRecords(records []*Record) (int, int, error) {
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
-			?, ?, ?,
-			?, ?, ?,
-			?, ?,
-			?, ?, ?,
+			?, ?, ?, ?, ?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?
@@ -1416,8 +1444,9 @@ func (s *Storage) ImportRecords(records []*Record) (int, int, error) {
 			r.AuthType, r.Source, r.ReasoningEffort, r.ServiceTier, genInt,
 			reqAtUTC.Format("2006-01-02 15:04:05"), unixSec, r.LatencyMs, r.TTFTMs, failedInt,
 			r.FailureStatusCode, r.FailureBody, r.FailSummary, r.HeaderErrorKind, r.HeaderErrorCode,
-			r.HeaderTraceID, r.HeaderQuotaRecoverAtMS, r.HeaderQuotaUsedPercent,
-			r.HeaderSecondaryQuotaRecoverAtMS, r.HeaderSecondaryQuotaUsedPercent, r.PlanType,
+			r.HeaderTraceID, r.HeaderQuotaRecoverAtMS, r.HeaderQuotaUsedPercent, r.HeaderQuotaWindowMinutes,
+			r.HeaderSecondaryQuotaRecoverAtMS, r.HeaderSecondaryQuotaUsedPercent, r.HeaderSecondaryQuotaWindowMinutes,
+			r.RateLimitReachedType, r.PlanType,
 			r.ResponseModel, mismatchInt,
 			r.InputTokens, r.OutputTokens, r.ReasoningTokens,
 			r.CachedTokens, r.CacheReadTokens, r.CacheCreationTokens, r.TotalTokens,
