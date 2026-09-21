@@ -212,3 +212,271 @@ func TestStorageLifecycle(t *testing.T) {
 		t.Fatalf("failed to close store: %v", err)
 	}
 }
+
+func TestCustomAndSyncedPricesStorage(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "cpa-usage-price-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	dbPath := filepath.Join(tempDir, "test_prices.db")
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open storage: %v", err)
+	}
+	defer store.Close()
+
+	// 1. Custom prices
+	cp := CustomPriceRecord{
+		Model:                 "custom-gpt-4o",
+		InputCostPerToken:     2.0e-6,
+		OutputCostPerToken:    8.0e-6,
+		CacheReadCostPerToken: 1.0e-6,
+		SupportsPromptCaching: true,
+		Source:                "manual",
+		UpdatedAt:             time.Now().Unix(),
+	}
+	if err := store.SaveCustomPrice(cp); err != nil {
+		t.Fatalf("failed to save custom price: %v", err)
+	}
+
+	customs, err := store.LoadCustomPrices()
+	if err != nil {
+		t.Fatalf("failed to load custom prices: %v", err)
+	}
+	if len(customs) != 1 || customs[0].Model != "custom-gpt-4o" {
+		t.Fatalf("expected custom-gpt-4o loaded, got %+v", customs)
+	}
+
+	// 2. Synced prices batch
+	syncedBatch := []SyncedPriceRecord{
+		{
+			Model:              "synced-claude-3-5",
+			InputCostPerToken:  3.0e-6,
+			OutputCostPerToken: 1.5e-5,
+			Source:             "litellm",
+			UpdatedAt:          time.Now().Unix(),
+		},
+		{
+			Model:              "synced-gemini-2.0",
+			InputCostPerToken:  1.0e-7,
+			OutputCostPerToken: 4.0e-7,
+			Source:             "openrouter",
+			UpdatedAt:          time.Now().Unix(),
+		},
+	}
+	if err := store.SaveSyncedPricesBatch(syncedBatch); err != nil {
+		t.Fatalf("failed to save synced prices batch: %v", err)
+	}
+
+	syncedLoaded, err := store.LoadSyncedPrices()
+	if err != nil {
+		t.Fatalf("failed to load synced prices: %v", err)
+	}
+	if len(syncedLoaded) != 2 {
+		t.Fatalf("expected 2 synced prices, got %d", len(syncedLoaded))
+	}
+
+	// 3. Delete custom price
+	if err := store.DeleteCustomPrice("custom-gpt-4o"); err != nil {
+		t.Fatalf("failed to delete custom price: %v", err)
+	}
+	customsAfter, err := store.LoadCustomPrices()
+	if err != nil {
+		t.Fatalf("failed to load custom prices after delete: %v", err)
+	}
+	if len(customsAfter) != 0 {
+		t.Fatalf("expected 0 custom prices after delete, got %d", len(customsAfter))
+	}
+}
+
+func TestDiagnosticsAndImportExport(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "cpa-usage-diag-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	dbPath := filepath.Join(tempDir, "diag_test.db")
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("failed to open storage: %v", err)
+	}
+	defer store.Close()
+
+	now := time.Now()
+
+	// Insert 2 successful and 2 failed records
+	recs := []*Record{
+		{
+			Provider:     "openai",
+			Model:        "gpt-4o",
+			APIKey:       "key-1",
+			AuthID:       "auth-oa-1",
+			SessionID:    "sess-001",
+			RequestedAt:  now.Add(-20 * time.Minute),
+			LatencyMs:    400,
+			InputTokens:  1000,
+			OutputTokens: 500,
+			TotalTokens:  1500,
+			TotalCost:    0.005,
+		},
+		{
+			Provider:     "anthropic",
+			Model:        "claude-3-5-sonnet",
+			APIKey:       "key-2",
+			AuthID:       "auth-an-1",
+			SessionID:    "sess-002",
+			RequestedAt:  now.Add(-15 * time.Minute),
+			LatencyMs:    600,
+			InputTokens:  2000,
+			OutputTokens: 1000,
+			TotalTokens:  3000,
+			TotalCost:    0.015,
+		},
+		{
+			Provider:          "openai",
+			Model:             "gpt-4o",
+			APIKey:            "key-1",
+			AuthID:            "auth-oa-1",
+			SessionID:         "sess-003",
+			RequestedAt:       now.Add(-10 * time.Minute),
+			LatencyMs:         150,
+			Failed:            true,
+			FailureStatusCode: 429,
+			HeaderErrorKind:   "insufficient_quota",
+			HeaderErrorCode:   "quota_exhausted",
+			FailSummary:       "Quota exceeded for account",
+			TotalTokens:       0,
+		},
+		{
+			Provider:          "openai",
+			Model:             "gpt-4o-mini",
+			APIKey:            "key-1",
+			AuthID:            "auth-oa-2",
+			SessionID:         "sess-004",
+			RequestedAt:       now.Add(-5 * time.Minute),
+			LatencyMs:         200,
+			Failed:            true,
+			FailureStatusCode: 401,
+			HeaderErrorKind:   "invalid_api_key",
+			HeaderErrorCode:   "unauthorized",
+			FailSummary:       "Invalid key provided",
+			TotalTokens:       0,
+		},
+	}
+
+	if err := store.BatchInsertRecords(recs); err != nil {
+		t.Fatalf("failed to insert records: %v", err)
+	}
+
+	// 1. Test GetDiagnosticStats
+	diag, err := store.GetDiagnosticStats(QueryFilter{}, 10)
+	if err != nil {
+		t.Fatalf("GetDiagnosticStats failed: %v", err)
+	}
+	if diag.TotalRequests != 4 {
+		t.Errorf("expected 4 total requests, got %d", diag.TotalRequests)
+	}
+	if diag.FailedRequests != 2 {
+		t.Errorf("expected 2 failed requests, got %d", diag.FailedRequests)
+	}
+	if diag.FailureRate != 0.5 {
+		t.Errorf("expected failure rate 0.5, got %v", diag.FailureRate)
+	}
+	if len(diag.ByStatusCode) != 2 {
+		t.Errorf("expected 2 status code groups (429 and 401), got %d", len(diag.ByStatusCode))
+	}
+	if len(diag.ByErrorKind) != 2 {
+		t.Errorf("expected 2 error kind groups, got %d", len(diag.ByErrorKind))
+	}
+	if len(diag.RecentErrors) != 2 {
+		t.Errorf("expected 2 recent errors, got %d", len(diag.RecentErrors))
+	}
+
+	// 2. Test ExportRecords
+	exported, err := store.ExportRecords(QueryFilter{}, 100)
+	if err != nil {
+		t.Fatalf("ExportRecords failed: %v", err)
+	}
+	if len(exported) != 4 {
+		t.Errorf("expected 4 exported records, got %d", len(exported))
+	}
+
+	// Export with filter
+	failedVal := true
+	exportedFailed, err := store.ExportRecords(QueryFilter{Failed: &failedVal}, 100)
+	if err != nil {
+		t.Fatalf("ExportRecords with failed filter failed: %v", err)
+	}
+	if len(exportedFailed) != 2 {
+		t.Errorf("expected 2 failed records exported, got %d", len(exportedFailed))
+	}
+
+	// 3. Test ImportRecords with deduplication
+	// Create duplicate of sess-001, plus a new record sess-005
+	importBatch := []*Record{
+		{
+			SessionID:   "sess-001", // duplicate
+			Provider:    "openai",
+			Model:       "gpt-4o",
+			RequestedAt: now.Add(-20 * time.Minute),
+			TotalTokens: 1500,
+		},
+		{
+			SessionID:   "sess-005", // new
+			Provider:    "google",
+			Model:       "gemini-2.0-flash",
+			APIKey:      "key-gem",
+			AuthID:      "auth-google-1",
+			RequestedAt: now.Add(-1 * time.Minute),
+			TotalTokens: 500,
+			TotalCost:   0.0001,
+		},
+	}
+
+	imported, skipped, err := store.ImportRecords(importBatch)
+	if err != nil {
+		t.Fatalf("ImportRecords failed: %v", err)
+	}
+	if imported != 1 {
+		t.Errorf("expected 1 imported, got %d", imported)
+	}
+	if skipped != 1 {
+		t.Errorf("expected 1 skipped, got %d", skipped)
+	}
+
+	// Verify total count in DB is now 5
+	diagAfter, _ := store.GetDiagnosticStats(QueryFilter{}, 10)
+	if diagAfter.TotalRequests != 5 {
+		t.Errorf("expected 5 total requests after import, got %d", diagAfter.TotalRequests)
+	}
+}
+
+func TestDetectModelMismatch(t *testing.T) {
+	cases := []struct {
+		requested string
+		resolved  string
+		response  string
+		expected  bool
+	}{
+		{"gpt-4o", "gpt-4o", "gpt-4o", false},
+		{"gpt-4o", "gpt-4o", "gpt-4o-2024-08-06", false},
+		{"claude-3-5-sonnet-latest", "claude-3-5-sonnet", "claude-3-5-sonnet-20241022", false},
+		{"models/gemini-2.0-flash", "gemini-2.0-flash", "gemini-2.0-flash", false},
+		{"gpt-4o", "gpt-4o", "gpt-4o-mini", true},
+		{"claude-3-5-sonnet", "claude-3-5-sonnet", "claude-3-5-haiku", true},
+		{"gemini-1.5-pro", "gemini-1.5-pro", "gemini-1.5-flash", true},
+		{"deepseek-reasoner", "deepseek-reasoner", "deepseek-chat", true},
+		{"gpt-4o", "gpt-4o", "gpt-3.5-turbo", true},
+		{"", "gpt-4o", "", false},
+	}
+
+	for _, c := range cases {
+		got := DetectModelMismatch(c.requested, c.resolved, c.response)
+		if got != c.expected {
+			t.Errorf("DetectModelMismatch(%q, %q, %q) = %v; want %v", c.requested, c.resolved, c.response, got, c.expected)
+		}
+	}
+}

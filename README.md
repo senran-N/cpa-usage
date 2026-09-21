@@ -6,9 +6,14 @@ CLIProxyAPI (CPA) 的使用量统计插件。以 C-ABI 动态库形式加载，�
 
 - **用量采集**：订阅 CPA 的 `usage.handle` 事件，落库保存 provider、模型、客户端 API Key、上游凭证、会话 ID、延迟、TTFT、失败状态码与各类 token 计数。
 - **费用估算**：依据内置价格表估算每次请求的美元成本，区分 input / output / cache read / cache creation 四类计价。
+- **动态价格中心**：支持通过 LiteLLM、OpenRouter、models.dev 或自定义 JSON URL 在线同步最新模型费率，支持用户对任意模型自定义价格覆盖（Custom Override）与持久化存储。
+- **敏感数据脱敏**：落库与返回的错误响应体、诊断信息经过全自动凭据脱敏清洗，防止 Bearer Token、API Key、PEM 私钥意外泄露。
+- **账号健康与配额追踪**：基于滑动窗口对上游账号进行 100 分制动态健康评分，智能识别正常、限流冷却、配额耗尽、凭据失效（需重登）等状态；实时解析 Codex 5H 与周级额度使用率及恢复时间。
+- **稳定性与错误诊断**：聚合统计系统请求失败率、HTTP 状态码分布、错误类型分布，自动提取结构化错误摘要并关联上游 Trace ID。
+- **数据迁移与备份**：支持 CSV、JSONL、JSON 多格式条件导出，支持无缝导入并智能去重 CPA-Manager-Plus 历史数据及本插件数据备份。
 - **持久化**：使用纯 Go 的 SQLite 实现（`modernc.org/sqlite`），无需 CGO 以外的额外依赖。写入经由内存队列批量提交。
-- **查询接口**：按时间、模型、provider、API Key、凭证、成功/失败等维度聚合与分页查询。
-- **Web 看板**：单页面应用，HTML/CSS/JS 通过 `//go:embed` 内嵌在动态库中，不依赖外部 CDN。
+- **查询接口**：按时间、模型、provider、API Key、凭证、成功/失败等维度聚合与分页查询，并提供丰富的运维与管理 API。
+- **Web 看板**：单页面应用，HTML/CSS/JS 通过 `//go:embed` 内嵌在动态库中，不依赖外部 CDN；具备响应式现代化界面、账号健康概览、配额进度条、价格管理与诊断中心等交互面板。
 
 ## 环境要求
 
@@ -115,6 +120,14 @@ python scripts/patch_observe.py --restore  # 从 .bak 还原
 | `records` | GET | 分页明细，`page`（默认 1）、`page_size`（默认 20，上限 100） |
 | `filter-options` | GET | 各维度的去重候选值 |
 | `cleanup` | POST | 删除历史记录，`days`（默认 90）或 `before`（时间戳 / RFC3339 / `YYYY-MM-DD`）；`days=0` 或 `days=all` 清空全部 |
+| `prices` | GET | 获取模型费率列表（内置、同步与自定义覆盖），支持 `search` 与 `source` 筛选 |
+| `prices/override` | POST/DELETE | 针对指定模型设置或删除自定义单价覆盖（$ / 1M Tokens） |
+| `prices/sync` | POST | 在线同步官方模型价格（支持 `litellm`、`openrouter`、`models.dev` 或自定义 JSON URL） |
+| `diagnostics` | GET | 稳定性与错误诊断数据：失败率、HTTP 状态码统计、错误种类分布与最近失败记录 |
+| `export` | GET | 数据导出，支持 `format=csv|jsonl|json`，支持携带筛选条件 |
+| `import` | POST | 数据导入与去重合入，支持 JSON 数组或 JSONL（兼容 CPA-Manager-Plus 历史数据） |
+| `accounts/health`| GET | 账号健康状态评估列表与汇总概览（100 分制打分、限流冷却、需重登状态识别） |
+| `accounts/quota` | GET | 账号配额使用率（Codex 5H 与周窗口使用率、重置恢复时间解析） |
 | `ping` | GET | 健康检查 |
 
 默认配置下汇总数据的入口是 `/v0/management/usage/summary`，需要 `X-Management-Key`。处理器对 `cleanup` 同时接受 GET、POST 和 DELETE；开启 `unauthenticated_api` 后，由于资源路由只放行 GET，它在该路径下可通过 GET 触发——参见下一节。

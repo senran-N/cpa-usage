@@ -18,9 +18,12 @@ type ModelPricing struct {
 	CacheCreationInputTokenCost         float64 `json:"cache_creation_input_token_cost"`
 	CacheCreationInputTokenCostAbove1hr float64 `json:"cache_creation_input_token_cost_above_1hr"`
 	CacheReadInputTokenCost             float64 `json:"cache_read_input_token_cost"`
-	LiteLLMProvider                     string  `json:"litellm_provider"`
-	Mode                                string  `json:"mode"`
+	LiteLLMProvider                     string  `json:"litellm_provider,omitempty"`
+	Mode                                string  `json:"mode,omitempty"`
 	SupportsPromptCaching               bool    `json:"supports_prompt_caching"`
+	Source                              string  `json:"source,omitempty"`
+	UpdatedAt                           int64   `json:"updated_at,omitempty"`
+	IsCustom                            bool    `json:"is_custom,omitempty"`
 }
 
 // CostBreakdown holds the calculated cost results in USD.
@@ -35,8 +38,10 @@ type CostBreakdown struct {
 
 // Engine manages model pricing calculations.
 type Engine struct {
-	mu          sync.RWMutex
-	pricingData map[string]*ModelPricing
+	mu              sync.RWMutex
+	pricingData     map[string]*ModelPricing
+	syncedData      map[string]*ModelPricing
+	customOverrides map[string]*ModelPricing
 }
 
 var (
@@ -55,7 +60,9 @@ func Default() *Engine {
 // NewEngine creates and initializes a pricing engine with embedded data.
 func NewEngine() *Engine {
 	e := &Engine{
-		pricingData: make(map[string]*ModelPricing),
+		pricingData:     make(map[string]*ModelPricing),
+		syncedData:      make(map[string]*ModelPricing),
+		customOverrides: make(map[string]*ModelPricing),
 	}
 	e.loadEmbeddedPrices()
 	return e
@@ -240,6 +247,20 @@ func (e *Engine) GetModelPricing(modelName string, at time.Time) (*ModelPricing,
 		return nil, ""
 	}
 
+	cleaned := modelLower
+	cleaned = strings.TrimPrefix(cleaned, "models/")
+	if idx := strings.LastIndex(cleaned, "/models/"); idx != -1 {
+		cleaned = cleaned[idx+len("/models/"):]
+	}
+
+	// 0. User custom overrides take highest priority
+	if p, ok := e.customOverrides[modelLower]; ok {
+		return p, modelLower
+	}
+	if p, ok := e.customOverrides[cleaned]; ok {
+		return p, cleaned
+	}
+
 	// 1. Check DeepSeek special pricing policy
 	if isDeepSeekModel(modelLower) {
 		peakMult := deepseekPeakMultiplierAt(at)
@@ -249,6 +270,7 @@ func (e *Engine) GetModelPricing(modelName string, at time.Time) (*ModelPricing,
 				OutputCostPerToken:      deepseekProOffPeakOutputPrice * peakMult,
 				CacheReadInputTokenCost: deepseekProOffPeakCacheRead * peakMult,
 				SupportsPromptCaching:   true,
+				Source:                  "deepseek-official",
 			}, "deepseek-reasoner"
 		}
 		return &ModelPricing{
@@ -256,19 +278,21 @@ func (e *Engine) GetModelPricing(modelName string, at time.Time) (*ModelPricing,
 			OutputCostPerToken:      deepseekFlashOffPeakOutputPrice * peakMult,
 			CacheReadInputTokenCost: deepseekFlashOffPeakCacheRead * peakMult,
 			SupportsPromptCaching:   true,
+			Source:                  "deepseek-official",
 		}, "deepseek-chat"
 	}
 
-	// 2. Exact match in catalog
-	if p, ok := e.pricingData[modelLower]; ok {
+	// 2. Synced pricing from upstream online sources
+	if p, ok := e.syncedData[modelLower]; ok {
 		return p, modelLower
 	}
+	if p, ok := e.syncedData[cleaned]; ok {
+		return p, cleaned
+	}
 
-	// 3. Strip prefixes like "models/" or "publishers/google/models/"
-	cleaned := modelLower
-	cleaned = strings.TrimPrefix(cleaned, "models/")
-	if idx := strings.LastIndex(cleaned, "/models/"); idx != -1 {
-		cleaned = cleaned[idx+len("/models/"):]
+	// 3. Exact match in catalog
+	if p, ok := e.pricingData[modelLower]; ok {
+		return p, modelLower
 	}
 	if p, ok := e.pricingData[cleaned]; ok {
 		return p, cleaned
@@ -344,6 +368,15 @@ func (e *Engine) GetModelPricing(modelName string, at time.Time) (*ModelPricing,
 	// resolve to different prices on different runs.
 	bestKey := ""
 	var bestPricing *ModelPricing
+	for k, p := range e.syncedData {
+		if !strings.Contains(cleaned, k) && !strings.Contains(k, cleaned) {
+			continue
+		}
+		if len(k) > len(bestKey) || (len(k) == len(bestKey) && k < bestKey) {
+			bestKey = k
+			bestPricing = p
+		}
+	}
 	for k, p := range e.pricingData {
 		if !strings.Contains(cleaned, k) && !strings.Contains(k, cleaned) {
 			continue
@@ -358,6 +391,167 @@ func (e *Engine) GetModelPricing(modelName string, at time.Time) (*ModelPricing,
 	}
 
 	return nil, ""
+}
+
+// SetCustomOverride stores a custom model price override.
+func (e *Engine) SetCustomOverride(model string, p *ModelPricing) {
+	if p == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	k := strings.ToLower(strings.TrimSpace(model))
+	clone := *p
+	clone.IsCustom = true
+	if clone.UpdatedAt == 0 {
+		clone.UpdatedAt = time.Now().Unix()
+	}
+	if clone.Source == "" {
+		clone.Source = "manual"
+	}
+	e.customOverrides[k] = &clone
+}
+
+// DeleteCustomOverride removes a custom model price override.
+func (e *Engine) DeleteCustomOverride(model string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	k := strings.ToLower(strings.TrimSpace(model))
+	if _, ok := e.customOverrides[k]; ok {
+		delete(e.customOverrides, k)
+		return true
+	}
+	return false
+}
+
+// GetCustomOverrides returns a copy of all current custom overrides.
+func (e *Engine) GetCustomOverrides() map[string]*ModelPricing {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	res := make(map[string]*ModelPricing, len(e.customOverrides))
+	for k, v := range e.customOverrides {
+		clone := *v
+		res[k] = &clone
+	}
+	return res
+}
+
+// LoadCustomOverrides loads multiple custom overrides.
+func (e *Engine) LoadCustomOverrides(overrides map[string]*ModelPricing) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for k, v := range overrides {
+		key := strings.ToLower(strings.TrimSpace(k))
+		clone := *v
+		clone.IsCustom = true
+		if clone.Source == "" {
+			clone.Source = "manual"
+		}
+		e.customOverrides[key] = &clone
+	}
+}
+
+// LoadSyncedPrices loads synced prices into the engine.
+func (e *Engine) LoadSyncedPrices(prices map[string]*ModelPricing) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for k, v := range prices {
+		key := strings.ToLower(strings.TrimSpace(k))
+		clone := *v
+		e.syncedData[key] = &clone
+	}
+}
+
+// SearchModels searches for models matching query across custom, synced, and embedded catalogs.
+func (e *Engine) SearchModels(query string, limit int, onlyCustom bool) []ModelPricingItem {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	query = strings.ToLower(strings.TrimSpace(query))
+	if limit <= 0 {
+		limit = 50
+	}
+
+	var results []ModelPricingItem
+	seen := make(map[string]bool)
+
+	checkAndAppend := func(model string, p *ModelPricing, isCustom bool) bool {
+		if seen[model] {
+			return false
+		}
+		if query != "" && !strings.Contains(model, query) {
+			return false
+		}
+		seen[model] = true
+		results = append(results, ModelPricingItem{
+			Model:                               model,
+			InputCostPerToken:                   p.InputCostPerToken,
+			OutputCostPerToken:                  p.OutputCostPerToken,
+			CacheCreationInputTokenCost:         p.CacheCreationInputTokenCost,
+			CacheCreationInputTokenCostAbove1hr: p.CacheCreationInputTokenCostAbove1hr,
+			CacheReadInputTokenCost:             p.CacheReadInputTokenCost,
+			PromptPerM:                          p.InputCostPerToken * 1_000_000,
+			CompletionPerM:                      p.OutputCostPerToken * 1_000_000,
+			CacheReadPerM:                       p.CacheReadInputTokenCost * 1_000_000,
+			CacheCreationPerM:                   p.CacheCreationInputTokenCost * 1_000_000,
+			SupportsPromptCaching:               p.SupportsPromptCaching,
+			IsCustom:                            isCustom,
+			Source:                              p.Source,
+			UpdatedAt:                           p.UpdatedAt,
+		})
+		return true
+	}
+
+	// 1. Custom overrides first
+	for k, p := range e.customOverrides {
+		if len(results) >= limit {
+			return results
+		}
+		checkAndAppend(k, p, true)
+	}
+
+	if onlyCustom {
+		return results
+	}
+
+	// 2. Synced models second
+	for k, p := range e.syncedData {
+		if len(results) >= limit {
+			return results
+		}
+		checkAndAppend(k, p, false)
+	}
+
+	// 3. Embedded pricing third
+	for k, p := range e.pricingData {
+		if len(results) >= limit {
+			return results
+		}
+		checkAndAppend(k, p, false)
+	}
+
+	return results
+}
+
+// GetCatalogSummary returns count statistics of models in the engine.
+func (e *Engine) GetCatalogSummary() (total int, custom int, synced int) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	custom = len(e.customOverrides)
+	synced = len(e.syncedData)
+	distinct := make(map[string]bool)
+	for k := range e.customOverrides {
+		distinct[k] = true
+	}
+	for k := range e.syncedData {
+		distinct[k] = true
+	}
+	for k := range e.pricingData {
+		distinct[k] = true
+	}
+	total = len(distinct)
+	return total, custom, synced
 }
 
 // Usage carries the token counters a single request reported.

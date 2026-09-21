@@ -12,6 +12,7 @@ import (
 
 	"cpa-usage/api"
 	"cpa-usage/pricing"
+	"cpa-usage/sanitize"
 	"cpa-usage/storage"
 	"cpa-usage/web"
 
@@ -156,6 +157,42 @@ func (p *Plugin) initStorageLocked() error {
 	p.store = store
 	p.apiHandler = api.NewHandler(store, p.pricing)
 
+	// Load previously synced and custom prices from persistent storage
+	if synced, err := store.LoadSyncedPrices(); err == nil && len(synced) > 0 {
+		syncedMap := make(map[string]*pricing.ModelPricing, len(synced))
+		for _, s := range synced {
+			syncedMap[s.Model] = &pricing.ModelPricing{
+				InputCostPerToken:                   s.InputCostPerToken,
+				OutputCostPerToken:                  s.OutputCostPerToken,
+				CacheReadInputTokenCost:             s.CacheReadCostPerToken,
+				CacheCreationInputTokenCost:         s.CacheCreationCostPerToken,
+				CacheCreationInputTokenCostAbove1hr: s.CacheCreationInputTokenCostAbove1hr,
+				SupportsPromptCaching:               s.SupportsPromptCaching,
+				Source:                              s.Source,
+				UpdatedAt:                           s.UpdatedAt,
+			}
+		}
+		p.pricing.LoadSyncedPrices(syncedMap)
+	}
+
+	if customs, err := store.LoadCustomPrices(); err == nil && len(customs) > 0 {
+		customMap := make(map[string]*pricing.ModelPricing, len(customs))
+		for _, c := range customs {
+			customMap[c.Model] = &pricing.ModelPricing{
+				InputCostPerToken:                   c.InputCostPerToken,
+				OutputCostPerToken:                  c.OutputCostPerToken,
+				CacheReadInputTokenCost:             c.CacheReadCostPerToken,
+				CacheCreationInputTokenCost:         c.CacheCreationCostPerToken,
+				CacheCreationInputTokenCostAbove1hr: c.CacheCreationInputTokenCostAbove1hr,
+				SupportsPromptCaching:               c.SupportsPromptCaching,
+				Source:                              c.Source,
+				UpdatedAt:                           c.UpdatedAt,
+				IsCustom:                            true,
+			}
+		}
+		p.pricing.LoadCustomOverrides(customMap)
+	}
+
 	// Trigger periodic retention cleanup if configured
 	if p.config.RetentionDays > 0 {
 		go func() {
@@ -195,41 +232,79 @@ func (p *Plugin) HandleUsage(payload []byte) ([]byte, error) {
 		TotalTokens:         rec.Detail.TotalTokens,
 	})
 
+	// Sanitize failure diagnostics
+	var sanitizedBody string
+	var failSummary string
+	if rec.Failure.Body != "" {
+		sanitizedBody = sanitize.SanitizeDiagnosticBody(rec.Failure.Body)
+		failSummary = sanitize.FailSummaryFromBody(sanitizedBody)
+	}
+
+	// Extract metrics and recovery from upstream headers
+	headerDerived := ParseResponseHeaders(rec.ResponseHeaders, rec.Failure.StatusCode, rec.RequestedAt)
+
+	// Extract response model from payload or upstream response headers
+	var rawFields struct {
+		ResponseModel string `json:"response_model"`
+		AltRespModel  string `json:"responseModel"`
+	}
+	_ = json.Unmarshal(payload, &rawFields)
+	respModel := strings.TrimSpace(rawFields.ResponseModel)
+	if respModel == "" {
+		respModel = strings.TrimSpace(rawFields.AltRespModel)
+	}
+	if respModel == "" {
+		respModel = strings.TrimSpace(headerDerived.ResponseModel)
+	}
+
+	modelMismatch := storage.DetectModelMismatch(rec.Alias, rec.Model, respModel)
+
 	storageRec := &storage.Record{
-		Provider:            rec.Provider,
-		BaseURL:             rec.BaseURL,
-		ExecutorType:        rec.ExecutorType,
-		Model:               rec.Model,
-		Alias:               rec.Alias,
-		APIKey:              rec.APIKey,
-		SessionID:           rec.SessionID,
-		ParentSessionID:     rec.ParentSessionID,
-		AuthID:              rec.AuthID,
-		AuthIndex:           rec.AuthIndex,
-		AuthType:            rec.AuthType,
-		Source:              rec.Source,
-		ReasoningEffort:     rec.ReasoningEffort,
-		ServiceTier:         rec.ServiceTier,
-		Generate:            rec.Generate,
-		RequestedAt:         rec.RequestedAt,
-		LatencyMs:           rec.Latency.Milliseconds(),
-		TTFTMs:              rec.TTFT.Milliseconds(),
-		Failed:              rec.Failed,
-		FailureStatusCode:   rec.Failure.StatusCode,
-		FailureBody:         rec.Failure.Body,
-		InputTokens:         rec.Detail.InputTokens,
-		OutputTokens:        rec.Detail.OutputTokens,
-		ReasoningTokens:     rec.Detail.ReasoningTokens,
-		CachedTokens:        rec.Detail.CachedTokens,
-		CacheReadTokens:     rec.Detail.CacheReadTokens,
-		CacheCreationTokens: rec.Detail.CacheCreationTokens,
-		TotalTokens:         rec.Detail.TotalTokens,
-		InputCost:           cost.InputCost,
-		OutputCost:          cost.OutputCost,
-		CacheReadCost:       cost.CacheReadCost,
-		CacheCreationCost:   cost.CacheCreationCost,
-		TotalCost:           cost.TotalCost,
-		MatchedModel:        cost.MatchedModel,
+		Provider:                        rec.Provider,
+		BaseURL:                         rec.BaseURL,
+		ExecutorType:                    rec.ExecutorType,
+		Model:                           rec.Model,
+		Alias:                           rec.Alias,
+		ResponseModel:                   respModel,
+		ModelMismatch:                   modelMismatch,
+		APIKey:                          rec.APIKey,
+		SessionID:                       rec.SessionID,
+		ParentSessionID:                 rec.ParentSessionID,
+		AuthID:                          rec.AuthID,
+		AuthIndex:                       rec.AuthIndex,
+		AuthType:                        rec.AuthType,
+		Source:                          rec.Source,
+		ReasoningEffort:                 rec.ReasoningEffort,
+		ServiceTier:                     rec.ServiceTier,
+		Generate:                        rec.Generate,
+		RequestedAt:                     rec.RequestedAt,
+		LatencyMs:                       rec.Latency.Milliseconds(),
+		TTFTMs:                          rec.TTFT.Milliseconds(),
+		Failed:                          rec.Failed,
+		FailureStatusCode:               rec.Failure.StatusCode,
+		FailureBody:                     sanitizedBody,
+		FailSummary:                     failSummary,
+		HeaderErrorKind:                 headerDerived.ErrorKind,
+		HeaderErrorCode:                 headerDerived.ErrorCode,
+		HeaderTraceID:                   headerDerived.TraceID,
+		HeaderQuotaRecoverAtMS:          headerDerived.QuotaRecoverAtMS,
+		HeaderQuotaUsedPercent:          headerDerived.QuotaUsedPercent,
+		HeaderSecondaryQuotaRecoverAtMS: headerDerived.SecondaryQuotaRecoverAtMS,
+		HeaderSecondaryQuotaUsedPercent: headerDerived.SecondaryQuotaUsedPercent,
+		PlanType:                        headerDerived.PlanType,
+		InputTokens:                     rec.Detail.InputTokens,
+		OutputTokens:                    rec.Detail.OutputTokens,
+		ReasoningTokens:                 rec.Detail.ReasoningTokens,
+		CachedTokens:                    rec.Detail.CachedTokens,
+		CacheReadTokens:                 rec.Detail.CacheReadTokens,
+		CacheCreationTokens:             rec.Detail.CacheCreationTokens,
+		TotalTokens:                     rec.Detail.TotalTokens,
+		InputCost:                       cost.InputCost,
+		OutputCost:                      cost.OutputCost,
+		CacheReadCost:                   cost.CacheReadCost,
+		CacheCreationCost:               cost.CacheCreationCost,
+		TotalCost:                       cost.TotalCost,
+		MatchedModel:                    cost.MatchedModel,
 	}
 
 	// Asynchronously enqueue for batch writing
@@ -251,7 +326,9 @@ const resourcePathPrefix = "/v0/resource/plugins/"
 // mounted under.
 var apiEndpoints = []string{
 	"summary", "timeseries", "models", "keys",
-	"auths", "records", "filter-options", "cleanup", "ping",
+	"auths", "accounts/health", "accounts/quota", "records", "filter-options",
+	"diagnostics", "export", "import", "prices", "prices/sync", "prices/override",
+	"cleanup", "ping",
 }
 
 // RegisterManagement exposes API routes and Web Dashboard UI resources.
@@ -273,8 +350,19 @@ func (p *Plugin) RegisterManagement(payload []byte) ([]byte, error) {
 			{Method: "GET", Path: "/usage/models"},
 			{Method: "GET", Path: "/usage/keys"},
 			{Method: "GET", Path: "/usage/auths"},
+			{Method: "GET", Path: "/usage/accounts/health"},
+			{Method: "GET", Path: "/usage/accounts/quota"},
 			{Method: "GET", Path: "/usage/records"},
 			{Method: "GET", Path: "/usage/filter-options"},
+			{Method: "GET", Path: "/usage/diagnostics"},
+			{Method: "GET", Path: "/usage/export"},
+			{Method: "POST", Path: "/usage/import"},
+			{Method: "GET", Path: "/usage/prices"},
+			{Method: "GET", Path: "/usage/prices/sync"},
+			{Method: "POST", Path: "/usage/prices/sync"},
+			{Method: "GET", Path: "/usage/prices/override"},
+			{Method: "POST", Path: "/usage/prices/override"},
+			{Method: "DELETE", Path: "/usage/prices/override"},
 			{Method: "POST", Path: "/usage/cleanup"},
 			{Method: "GET", Path: "/usage/ping"},
 		},

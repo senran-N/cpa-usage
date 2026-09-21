@@ -4,53 +4,65 @@ import "time"
 
 // Record represents an ingested usage log with billing and token metrics.
 type Record struct {
-	ID                  int64     `json:"id"`
-	Provider            string    `json:"provider"`
-	BaseURL             string    `json:"base_url,omitempty"`
-	ExecutorType        string    `json:"executor_type,omitempty"`
-	Model               string    `json:"model"`
-	Alias               string    `json:"alias,omitempty"`
-	APIKey              string    `json:"api_key,omitempty"`
-	SessionID           string    `json:"session_id,omitempty"`
-	ParentSessionID     string    `json:"parent_session_id,omitempty"`
-	AuthID              string    `json:"auth_id,omitempty"`
-	AuthIndex           string    `json:"auth_index,omitempty"`
-	AuthType            string    `json:"auth_type,omitempty"`
-	Source              string    `json:"source,omitempty"`
-	ReasoningEffort     string    `json:"reasoning_effort,omitempty"`
-	ServiceTier         string    `json:"service_tier,omitempty"`
-	Generate            bool      `json:"generate"`
-	RequestedAt         time.Time `json:"requested_at"`
-	LatencyMs           int64     `json:"latency_ms"`
-	TTFTMs              int64     `json:"ttft_ms"`
-	Failed              bool      `json:"failed"`
-	FailureStatusCode   int       `json:"failure_status_code,omitempty"`
-	FailureBody         string    `json:"failure_body,omitempty"`
-	InputTokens         int64     `json:"input_tokens"`
-	OutputTokens        int64     `json:"output_tokens"`
-	ReasoningTokens     int64     `json:"reasoning_tokens"`
-	CachedTokens        int64     `json:"cached_tokens"`
-	CacheReadTokens     int64     `json:"cache_read_tokens"`
-	CacheCreationTokens int64     `json:"cache_creation_tokens"`
-	TotalTokens         int64     `json:"total_tokens"`
-	InputCost           float64   `json:"input_cost"`
-	OutputCost          float64   `json:"output_cost"`
-	CacheReadCost       float64   `json:"cache_read_cost"`
-	CacheCreationCost   float64   `json:"cache_creation_cost"`
-	TotalCost           float64   `json:"total_cost"`
-	MatchedModel        string    `json:"matched_model,omitempty"`
+	ID                              int64     `json:"id"`
+	Provider                        string    `json:"provider"`
+	BaseURL                         string    `json:"base_url,omitempty"`
+	ExecutorType                    string    `json:"executor_type,omitempty"`
+	Model                           string    `json:"model"`
+	Alias                           string    `json:"alias,omitempty"`
+	APIKey                          string    `json:"api_key,omitempty"`
+	SessionID                       string    `json:"session_id,omitempty"`
+	ParentSessionID                 string    `json:"parent_session_id,omitempty"`
+	AuthID                          string    `json:"auth_id,omitempty"`
+	AuthIndex                       string    `json:"auth_index,omitempty"`
+	AuthType                        string    `json:"auth_type,omitempty"`
+	Source                          string    `json:"source,omitempty"`
+	ReasoningEffort                 string    `json:"reasoning_effort,omitempty"`
+	ServiceTier                     string    `json:"service_tier,omitempty"`
+	Generate                        bool      `json:"generate"`
+	RequestedAt                     time.Time `json:"requested_at"`
+	LatencyMs                       int64     `json:"latency_ms"`
+	TTFTMs                          int64     `json:"ttft_ms"`
+	Failed                          bool      `json:"failed"`
+	FailureStatusCode               int       `json:"failure_status_code,omitempty"`
+	FailureBody                     string    `json:"failure_body,omitempty"`
+	FailSummary                     string    `json:"fail_summary,omitempty"`
+	HeaderErrorKind                 string    `json:"header_error_kind,omitempty"`
+	HeaderErrorCode                 string    `json:"header_error_code,omitempty"`
+	HeaderTraceID                   string    `json:"header_trace_id,omitempty"`
+	HeaderQuotaRecoverAtMS          int64     `json:"header_quota_recover_at_ms,omitempty"`
+	HeaderQuotaUsedPercent          *float64  `json:"header_quota_used_percent,omitempty"`
+	HeaderSecondaryQuotaRecoverAtMS int64     `json:"header_secondary_quota_recover_at_ms,omitempty"`
+	HeaderSecondaryQuotaUsedPercent *float64  `json:"header_secondary_quota_used_percent,omitempty"`
+	PlanType                        string    `json:"plan_type,omitempty"`
+	ResponseModel                   string    `json:"response_model,omitempty"`
+	ModelMismatch                   bool      `json:"model_mismatch,omitempty"`
+	InputTokens                     int64     `json:"input_tokens"`
+	OutputTokens                    int64     `json:"output_tokens"`
+	ReasoningTokens                 int64     `json:"reasoning_tokens"`
+	CachedTokens                    int64     `json:"cached_tokens"`
+	CacheReadTokens                 int64     `json:"cache_read_tokens"`
+	CacheCreationTokens             int64     `json:"cache_creation_tokens"`
+	TotalTokens                     int64     `json:"total_tokens"`
+	InputCost                       float64   `json:"input_cost"`
+	OutputCost                      float64   `json:"output_cost"`
+	CacheReadCost                   float64   `json:"cache_read_cost"`
+	CacheCreationCost               float64   `json:"cache_creation_cost"`
+	TotalCost                       float64   `json:"total_cost"`
+	MatchedModel                    string    `json:"matched_model,omitempty"`
 }
 
 // QueryFilter defines filtering criteria for aggregation queries.
 type QueryFilter struct {
-	StartTime *time.Time `json:"start_time,omitempty"`
-	EndTime   *time.Time `json:"end_time,omitempty"`
-	APIKey    string     `json:"api_key,omitempty"`
-	Model     string     `json:"model,omitempty"`
-	Provider  string     `json:"provider,omitempty"`
-	AuthID    string     `json:"auth_id,omitempty"`
-	Failed    *bool      `json:"failed,omitempty"`
-	Search    string     `json:"search,omitempty"`
+	StartTime     *time.Time `json:"start_time,omitempty"`
+	EndTime       *time.Time `json:"end_time,omitempty"`
+	APIKey        string     `json:"api_key,omitempty"`
+	Model         string     `json:"model,omitempty"`
+	Provider      string     `json:"provider,omitempty"`
+	AuthID        string     `json:"auth_id,omitempty"`
+	Failed        *bool      `json:"failed,omitempty"`
+	ModelMismatch *bool      `json:"model_mismatch,omitempty"`
+	Search        string     `json:"search,omitempty"`
 }
 
 // RecordQueryFilter defines criteria for paginated raw record queries.
@@ -124,4 +136,139 @@ type FilterOptions struct {
 	Providers []string `json:"providers"`
 	APIKeys   []string `json:"api_keys"`
 	AuthIDs   []string `json:"auth_ids"`
+}
+
+// DiagnosticErrorGroup represents count of errors grouped by an attribute.
+type DiagnosticErrorGroup struct {
+	Key   string `json:"key"`
+	Count int64  `json:"count"`
+}
+
+// DiagnosticStats provides error distributions and recent error telemetry.
+type DiagnosticStats struct {
+	TotalRequests   int64                  `json:"total_requests"`
+	FailedRequests  int64                  `json:"failed_requests"`
+	FailureRate     float64                `json:"failure_rate"`
+	ModelMismatches int64                  `json:"model_mismatches"`
+	ByStatusCode    []DiagnosticErrorGroup `json:"by_status_code"`
+	ByErrorKind     []DiagnosticErrorGroup `json:"by_error_kind"`
+	ByErrorCode     []DiagnosticErrorGroup `json:"by_error_code"`
+	ByProvider      []DiagnosticErrorGroup `json:"by_provider"`
+	ByModel         []DiagnosticErrorGroup `json:"by_model"`
+	ByMismatchPair  []DiagnosticErrorGroup `json:"by_mismatch_pair,omitempty"`
+	RecentErrors    []*Record              `json:"recent_errors"`
+}
+
+// CustomPriceRecord stores a persistent custom price override.
+type CustomPriceRecord struct {
+	Model                               string  `json:"model"`
+	InputCostPerToken                   float64 `json:"input_cost_per_token"`
+	OutputCostPerToken                  float64 `json:"output_cost_per_token"`
+	CacheReadCostPerToken               float64 `json:"cache_read_cost_per_token"`
+	CacheCreationCostPerToken           float64 `json:"cache_creation_cost_per_token"`
+	CacheCreationInputTokenCostAbove1hr float64 `json:"cache_creation_input_token_cost_above_1hr,omitempty"`
+	SupportsPromptCaching               bool    `json:"supports_prompt_caching"`
+	Source                              string  `json:"source,omitempty"`
+	UpdatedAt                           int64   `json:"updated_at"`
+}
+
+// SyncedPriceRecord stores a persistent synced price from remote sources.
+type SyncedPriceRecord struct {
+	Model                               string  `json:"model"`
+	InputCostPerToken                   float64 `json:"input_cost_per_token"`
+	OutputCostPerToken                  float64 `json:"output_cost_per_token"`
+	CacheReadCostPerToken               float64 `json:"cache_read_cost_per_token"`
+	CacheCreationCostPerToken           float64 `json:"cache_creation_cost_per_token"`
+	CacheCreationInputTokenCostAbove1hr float64 `json:"cache_creation_input_token_cost_above_1hr,omitempty"`
+	SupportsPromptCaching               bool    `json:"supports_prompt_caching"`
+	Source                              string  `json:"source,omitempty"`
+	UpdatedAt                           int64   `json:"updated_at"`
+}
+
+// Account health status constants.
+const (
+	HealthStatusAvailable    = "available"
+	HealthStatusLowQuota     = "low_quota"
+	HealthStatusExhausted    = "exhausted"
+	HealthStatusCooldown     = "cooldown"
+	HealthStatusReauthNeeded = "reauth_needed"
+	HealthStatusError        = "error"
+	HealthStatusUnknown      = "unknown"
+)
+
+// AccountHealth represents evaluated operational status and telemetry for an account/credential.
+type AccountHealth struct {
+	AuthID                   string    `json:"auth_id"`
+	AuthType                 string    `json:"auth_type,omitempty"`
+	Provider                 string    `json:"provider"`
+	PlanType                 string    `json:"plan_type,omitempty"`
+	Status                   string    `json:"status"` // available, low_quota, exhausted, cooldown, reauth_needed, error, unknown
+	StatusReason             string    `json:"status_reason"`
+	HealthScore              float64   `json:"health_score"` // 0 - 100
+	TotalRequests            int64     `json:"total_requests"`
+	SuccessRequests          int64     `json:"success_requests"`
+	FailedRequests           int64     `json:"failed_requests"`
+	SuccessRate              float64   `json:"success_rate"`
+	AvgLatencyMs             float64   `json:"avg_latency_ms"`
+	LastUsedAt               time.Time `json:"last_used_at"`
+	LastStatusCode           int       `json:"last_status_code,omitempty"`
+	LastErrorSummary         string    `json:"last_error_summary,omitempty"`
+	LastErrorKind            string    `json:"last_error_kind,omitempty"`
+	QuotaUsedPercent         *float64  `json:"quota_used_percent,omitempty"`
+	QuotaRecoverAtMS         int64     `json:"quota_recover_at_ms,omitempty"`
+	CooldownRemainingSeconds int64     `json:"cooldown_remaining_seconds"`
+	InCooldown               bool      `json:"in_cooldown"`
+}
+
+// AccountHealthSummary aggregates health counts across all accounts.
+type AccountHealthSummary struct {
+	TotalAccounts  int `json:"total_accounts"`
+	HealthyCount   int `json:"healthy_count"`
+	LowQuotaCount  int `json:"low_quota_count"`
+	CooldownCount  int `json:"cooldown_count"`
+	ExhaustedCount int `json:"exhausted_count"`
+	ReauthCount    int `json:"reauth_count"`
+	ErrorCount     int `json:"error_count"`
+	UnknownCount   int `json:"unknown_count"`
+}
+
+// AccountHealthResponse is the response payload for /api/accounts/health.
+type AccountHealthResponse struct {
+	Summary       AccountHealthSummary `json:"summary"`
+	Accounts      []AccountHealth      `json:"accounts"`
+	TotalAccounts int                  `json:"total_accounts"`
+}
+
+// AccountQuotaWindowDetail holds timing and usage metrics for a specific quota window.
+type AccountQuotaWindowDetail struct {
+	WindowKind       string   `json:"window_kind"` // five_hour, weekly, monthly, unknown
+	DurationSeconds  int64    `json:"duration_seconds"`
+	UsedPercent      *float64 `json:"used_percent,omitempty"`
+	RemainingPercent *float64 `json:"remaining_percent,omitempty"`
+	ResetAtMS        int64    `json:"reset_at_ms,omitempty"`
+	ResetAfterSec    int64    `json:"reset_after_seconds,omitempty"`
+	IsExhausted      bool     `json:"is_exhausted"`
+}
+
+// AccountQuotaDetail represents quota snapshots and rate limit windows for an account.
+type AccountQuotaDetail struct {
+	AuthID                   string                    `json:"auth_id"`
+	AuthType                 string                    `json:"auth_type,omitempty"`
+	Provider                 string                    `json:"provider"`
+	PlanType                 string                    `json:"plan_type,omitempty"`
+	PrimaryWindow            *AccountQuotaWindowDetail `json:"primary_window,omitempty"`
+	SecondaryWindow          *AccountQuotaWindowDetail `json:"secondary_window,omitempty"`
+	SummaryUsedPercent       *float64                  `json:"summary_used_percent,omitempty"`
+	SummaryRecoverAtMS       int64                     `json:"summary_recover_at_ms,omitempty"`
+	CooldownRemainingSeconds int64                     `json:"cooldown_remaining_seconds"`
+	InCooldown               bool                      `json:"in_cooldown"`
+	TotalTokensRecent        int64                     `json:"total_tokens_recent"`
+	TotalCostRecent          float64                   `json:"total_cost_recent"`
+	LastObservedAt           time.Time                 `json:"last_observed_at"`
+}
+
+// AccountQuotaResponse is the response payload for /api/accounts/quota.
+type AccountQuotaResponse struct {
+	Quotas        []AccountQuotaDetail `json:"quotas"`
+	TotalAccounts int                  `json:"total_accounts"`
 }

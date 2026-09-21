@@ -552,8 +552,17 @@
       background: var(--bg-hover);
     }
 
-    /* Drill-down Button in Tables */
-    .btn-drill {
+    /* Universal Card Container */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: var(--card-shadow);
+      overflow: hidden;
+    }
+
+    /* Standardized Table Action Buttons */
+    .table-btn, .btn-drill {
       cursor: pointer;
       background: transparent;
       border: 1px solid var(--border-color);
@@ -562,9 +571,46 @@
       font-size: 11.5px;
       font-weight: 500;
       padding: 3px 8px;
-      transition: all .15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: color .15s, border-color .15s, background-color .15s;
+      user-select: none;
+      line-height: 1.3;
+      white-space: nowrap;
     }
-    .btn-drill:hover {
+    .table-btn:hover, .btn-drill:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--border-hover);
+    }
+    .table-btn-danger {
+      color: var(--error-color);
+    }
+    .table-btn-danger:hover {
+      border-color: var(--error-color);
+      color: var(--error-color);
+      background: rgba(198, 87, 70, 0.08);
+    }
+
+    /* Standardized Modal Close Button */
+    .modal-close {
+      cursor: pointer;
+      background: transparent;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      transition: all .15s;
+      padding: 0;
+      line-height: 1;
+    }
+    .modal-close:hover {
       background: var(--bg-hover);
       color: var(--text-primary);
       border-color: var(--border-hover);
@@ -709,6 +755,18 @@
       position: relative;
       display: inline-flex;
     }
+    .cpa-dropdown.full-width {
+      width: 100%;
+      display: flex;
+    }
+    .cpa-dropdown.full-width .cpa-dropdown-trigger {
+      width: 100%;
+      justify-content: space-between;
+    }
+    .cpa-dropdown.full-width .cpa-dropdown-popover {
+      width: 100%;
+      max-width: none;
+    }
     .cpa-dropdown-trigger {
       cursor: pointer;
       background: var(--bg-tertiary);
@@ -841,6 +899,145 @@
       font-weight: 600;
       color: var(--text-primary);
     }
+
+    /* Enhanced Modal Layouts */
+    .modal-card-large {
+      max-width: 920px !important;
+      width: 95% !important;
+    }
+    .modal-card-medium {
+      max-width: 680px !important;
+      width: 92% !important;
+    }
+
+    /* Additional Badge Styles */
+    .badge-warning {
+      background: rgba(224, 170, 20, 0.14);
+      color: var(--warning-color);
+      border: 1px solid rgba(224, 170, 20, 0.35);
+    }
+    .badge-reauth {
+      background: rgba(239, 68, 68, 0.16);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      font-weight: 600;
+    }
+    .badge-purple {
+      background: rgba(168, 85, 247, 0.14);
+      color: #a855f7;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+    .badge-info {
+      background: rgba(59, 130, 246, 0.14);
+      color: #3b82f6;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    /* Account Health Summary Banner */
+    .health-summary-banner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+    .health-stat-pill {
+      cursor: pointer;
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all .15s ease;
+      box-shadow: var(--card-shadow);
+      user-select: none;
+    }
+    .health-stat-pill:hover {
+      border-color: var(--border-hover);
+      background: var(--bg-hover);
+    }
+    .health-stat-pill.active {
+      border-color: var(--primary-color);
+      background: var(--bg-tertiary);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .health-stat-pill strong {
+      color: var(--text-primary);
+      font-size: 13px;
+    }
+
+    /* Quota Progress Bars */
+    .progress-track {
+      width: 100%;
+      min-width: 80px;
+      max-width: 120px;
+      height: 6px;
+      background: var(--bg-tertiary);
+      border-radius: 9999px;
+      overflow: hidden;
+      margin-top: 3px;
+      border: 1px solid var(--border-color);
+    }
+    .progress-fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.25s ease;
+    }
+    .progress-fill-emerald { background: #10b981; }
+    .progress-fill-yellow { background: #e0aa14; }
+    .progress-fill-amber { background: #f97316; }
+    .progress-fill-red { background: #ef4444; }
+
+    /* Drag & Drop Zone */
+    .drop-zone {
+      border: 2px dashed var(--border-color);
+      border-radius: 8px;
+      padding: 24px;
+      text-align: center;
+      background: var(--bg-tertiary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--primary-color);
+      background: var(--bg-hover);
+    }
+
+    /* Diagnostic Metrics Grid */
+    .diag-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    @media (max-width: 768px) {
+      .diag-metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    .diag-metric-box {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: var(--bg-card);
+      box-shadow: var(--card-shadow);
+    }
+    .diag-metric-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .diag-metric-value {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-top: 2px;
+    }
   </style>
 </head>
 <body>
@@ -862,15 +1059,25 @@
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
           刷新
         </button>
-        <button id="btnExport" class="action-btn" title="导出 CSV">
+        <button id="btnOpenPricesModal" class="action-btn" title="模型价格与同步中心">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          价格中心
+        </button>
+        <button id="btnOpenDiagnosticsModal" class="action-btn" title="稳定性与错误诊断">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+          稳定性诊断
+        </button>
+        <button id="btnOpenDataHubModal" class="action-btn" title="数据备份、导出与导入">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          导出 CSV
+          数据迁移/导出
         </button>
         <button id="btnOpenCleanupModal" class="action-btn action-danger" title="按日期或保留期清理历史数据">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
           数据清理
         </button>
+        <button id="btnExport" style="display: none;" title="导出 CSV"></button>
         <div class="cpa-dropdown" id="dropdownAutoRefresh"></div>
+        <div class="cpa-dropdown" id="dropdownLang"></div>
       </div>
     </header>
 
@@ -884,9 +1091,9 @@
     <!-- Stat Cards (4 Tiles) -->
     <div class="stats-grid">
       <div class="stat-tile" style="--tile-accent: var(--success-color);">
-        <span class="stat-label">预估总支出 (USD)</span>
+        <span class="stat-label">预估总支出</span>
         <div class="stat-value" id="kpi-cost">$0.00</div>
-        <div class="stat-hint">实时计费 · Prompt Cache 减免已折算</div>
+        <div class="stat-hint">实时计费 · 缓存减免已折算</div>
       </div>
       <div class="stat-tile" style="--tile-accent: var(--primary-color);">
         <span class="stat-label">调用总次数</span>
@@ -909,8 +1116,9 @@
     <div class="tab-bar">
       <button class="tab-item active" data-tab="tab-overview">概览走势</button>
       <button class="tab-item" data-tab="tab-models">模型透视</button>
+      <button class="tab-item" data-tab="tab-integrity">模型一致性</button>
       <button class="tab-item" data-tab="tab-providers">AI 提供商</button>
-      <button class="tab-item" data-tab="tab-auths">认证文件</button>
+      <button class="tab-item" data-tab="tab-auths">认证账号与健康</button>
       <button class="tab-item" data-tab="tab-keys">客户端 Key</button>
       <button class="tab-item" data-tab="tab-logs">调用日志</button>
     </div>
@@ -941,7 +1149,7 @@
             <span class="chart-title" id="trendChartTitle">请求量与费用走势</span>
             <div class="chart-legend">
               <div class="legend-item"><div class="legend-dot" style="background: var(--primary-color);"></div>请求量</div>
-              <div class="legend-item"><div class="legend-dot" style="background: var(--success-color);"></div>费用 (USD)</div>
+              <div class="legend-item"><div class="legend-dot" style="background: var(--success-color);"></div>费用</div>
             </div>
           </div>
           <div class="canvas-wrap">
@@ -999,7 +1207,7 @@
                 <th class="num sortable" onclick="handleSort('models', 'total_tokens')">总 Token <span id="sort-models-total_tokens" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('models', 'input_tokens')">输入 Tokens <span id="sort-models-input_tokens" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('models', 'output_tokens')">输出 Tokens <span id="sort-models-output_tokens" class="sort-arrow"></span></th>
-                <th class="num sortable" onclick="handleSort('models', 'total_cost')">预估费用 (USD) <span id="sort-models-total_cost" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('models', 'total_cost')">预估费用 <span id="sort-models-total_cost" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('models', 'avg_latency_ms')">平均延迟 <span id="sort-models-avg_latency_ms" class="sort-arrow"></span></th>
                 <th style="text-align: center;">操作</th>
               </tr>
@@ -1008,6 +1216,87 @@
               <tr><td colspan="8" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无数据</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: MODEL INTEGRITY (防掺水与模型一致性独立审计中心) -->
+    <div id="tab-integrity" class="tab-content" style="display: none;">
+      <!-- Integrity Summary Metrics -->
+      <div class="stats-grid" style="margin-bottom: 16px;">
+        <div class="stat-tile" style="--tile-accent: var(--primary-color);">
+          <span class="stat-label">审计请求总量</span>
+          <div class="stat-value" id="integrity-total-requests">0</div>
+          <div class="stat-hint">当前时间范围内记录的所有调用</div>
+        </div>
+        <div class="stat-tile" style="--tile-accent: var(--success-color);">
+          <span class="stat-label">一致率</span>
+          <div class="stat-value" id="integrity-match-rate">100.0%</div>
+          <div class="stat-hint">实际响应模型与请求/目标完全吻合</div>
+        </div>
+        <div class="stat-tile" style="--tile-accent: var(--warning-color);">
+          <span class="stat-label">模型不一致异常</span>
+          <div class="stat-value" id="integrity-mismatch-count" style="color: var(--warning-color);">0</div>
+          <div class="stat-hint">疑似被上游降级、替换或掺水</div>
+        </div>
+        <div class="stat-tile" style="--tile-accent: var(--text-secondary);">
+          <span class="stat-label">响应模型标识解析率</span>
+          <div class="stat-value" id="integrity-response-coverage">0.0%</div>
+          <div class="stat-hint">上游成功回传真实模型签名</div>
+        </div>
+      </div>
+
+      <!-- Substitution Pattern Card -->
+      <div class="card" style="margin-bottom: 16px; padding: 16px 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <div>
+            <h3 style="font-size: 13.5px; font-weight: 600; margin: 0 0 4px 0;" data-i18n="integrity_patterns_title">模型置换与降级模式</h3>
+            <div style="font-size: 12px; color: var(--text-tertiary);" data-i18n="integrity_patterns_desc">实时汇总检测到的所有上游实际返回模型偏离预期目标的组合关系</div>
+          </div>
+          <button class="table-btn" onclick="loadIntegrityData()" data-i18n="integrity_btn_refresh">刷新检测</button>
+        </div>
+        <div id="integrityPatternsContainer">
+          <div style="text-align: center; color: var(--text-tertiary); padding: 24px 0; font-size: 12.5px;" data-i18n="integrity_empty_patterns">
+            当前未检测到任何模型不一致或降级记录。所有渠道返回模型均与预期路由目标吻合。
+          </div>
+        </div>
+      </div>
+
+      <!-- Inconsistent Request Stream Table -->
+      <div class="table-container">
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border-color); background: var(--bg-tertiary);">
+          <div>
+            <h3 style="font-size: 13.5px; font-weight: 600; margin: 0 0 2px 0;" data-i18n="integrity_stream_title">模型不一致调用明细</h3>
+            <div style="font-size: 12px; color: var(--text-tertiary);" data-i18n="integrity_stream_desc">专门追踪被判定为模型不一致的单次调用快照</div>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="col_time">请求时间</th>
+                <th>状态</th>
+                <th data-i18n="col_routed_model">请求 / 路由模型</th>
+                <th data-i18n="col_response_model">实际响应模型</th>
+                <th>判定结论</th>
+                <th data-i18n="col_provider">AI 提供商</th>
+                <th data-i18n="col_auth_id">认证账号</th>
+                <th data-i18n="col_api_key">客户端 Key</th>
+                <th class="num" data-i18n="col_latency">延迟</th>
+                <th style="text-align: center;" data-i18n="col_detail">明细</th>
+              </tr>
+            </thead>
+            <tbody id="integrityTableBody">
+              <tr><td colspan="10" style="text-align: center; color: var(--text-tertiary); padding: 36px;" data-i18n="integrity_empty_logs">当前范围内暂无模型不一致记录</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span id="integrityLogsPaginationInfo">第 1 页，共 0 条</span>
+          <div style="display: flex; gap: 6px;">
+            <button id="btnIntegrityPrevPage" class="action-btn" style="padding: 3px 8px; font-size: 11.5px;" data-i18n="btn_prev">上一页</button>
+            <button id="btnIntegrityNextPage" class="action-btn" style="padding: 3px 8px; font-size: 11.5px;" data-i18n="btn_next">下一页</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1023,7 +1312,7 @@
                 <th class="num sortable" onclick="handleSort('providers', 'requests')">请求次数 <span id="sort-providers-requests" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('providers', 'failed_count')">失败次数 <span id="sort-providers-failed_count" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('providers', 'total_tokens')">总 Token <span id="sort-providers-total_tokens" class="sort-arrow"></span></th>
-                <th class="num sortable" onclick="handleSort('providers', 'total_cost')">预估费用 (USD) <span id="sort-providers-total_cost" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('providers', 'total_cost')">预估费用 <span id="sort-providers-total_cost" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('providers', 'avg_latency_ms')">平均延迟 <span id="sort-providers-avg_latency_ms" class="sort-arrow"></span></th>
                 <th style="text-align: center;">操作</th>
               </tr>
@@ -1036,26 +1325,31 @@
       </div>
     </div>
 
-    <!-- TAB 4: AUTHS (Accounts) -->
+    <!-- TAB 4: AUTHS (Accounts Health & Quotas) -->
     <div id="tab-auths" class="tab-content" style="display: none;">
+      <!-- Health Summary Banner -->
+      <div id="authHealthSummaryBanner" class="health-summary-banner"></div>
+
       <div class="table-container">
         <div class="table-scroll">
           <table>
             <thead>
               <tr>
-                <th class="sortable" onclick="handleSort('auths', 'auth_id')">认证文件 (Auth ID) <span id="sort-auths-auth_id" class="sort-arrow"></span></th>
+                <th class="sortable" onclick="handleSort('auths', 'auth_id')">认证账号 <span id="sort-auths-auth_id" class="sort-arrow"></span></th>
                 <th class="sortable" onclick="handleSort('auths', 'provider')">AI 提供商 <span id="sort-auths-provider" class="sort-arrow"></span></th>
-                <th>凭证类型</th>
+                <th>状态与健康度</th>
+                <th>5小时配额</th>
+                <th>周配额</th>
                 <th class="num sortable" onclick="handleSort('auths', 'requests')">请求次数 <span id="sort-auths-requests" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('auths', 'failed_count')">失败次数 <span id="sort-auths-failed_count" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('auths', 'total_tokens')">总 Token <span id="sort-auths-total_tokens" class="sort-arrow"></span></th>
-                <th class="num sortable" onclick="handleSort('auths', 'total_cost')">预估费用 (USD) <span id="sort-auths-total_cost" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('auths', 'total_cost')">预估费用 <span id="sort-auths-total_cost" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('auths', 'avg_latency_ms')">平均延迟 <span id="sort-auths-avg_latency_ms" class="sort-arrow"></span></th>
                 <th style="text-align: center;">操作</th>
               </tr>
             </thead>
             <tbody id="authsTableBody">
-              <tr><td colspan="9" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无数据</td></tr>
+              <tr><td colspan="11" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无数据</td></tr>
             </tbody>
           </table>
         </div>
@@ -1069,10 +1363,10 @@
           <table>
             <thead>
               <tr>
-                <th class="sortable" onclick="handleSort('keys', 'api_key')">客户端 API Key <span id="sort-keys-api_key" class="sort-arrow"></span></th>
+                <th class="sortable" onclick="handleSort('keys', 'api_key')">客户端 Key <span id="sort-keys-api_key" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('keys', 'requests')">请求次数 <span id="sort-keys-requests" class="sort-arrow"></span></th>
-                <th class="num sortable" onclick="handleSort('keys', 'total_tokens')">总 Token 消耗 <span id="sort-keys-total_tokens" class="sort-arrow"></span></th>
-                <th class="num sortable" onclick="handleSort('keys', 'total_cost')">预估费用 (USD) <span id="sort-keys-total_cost" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('keys', 'total_tokens')">总 Token <span id="sort-keys-total_tokens" class="sort-arrow"></span></th>
+                <th class="num sortable" onclick="handleSort('keys', 'total_cost')">预估费用 <span id="sort-keys-total_cost" class="sort-arrow"></span></th>
                 <th>最后活跃时间</th>
                 <th style="text-align: center;">操作</th>
               </tr>
@@ -1094,18 +1388,19 @@
               <tr>
                 <th>请求时间</th>
                 <th>状态</th>
-                <th>模型</th>
+                <th>请求/路由模型</th>
+                <th>实际响应模型</th>
                 <th>AI 提供商</th>
-                <th>认证文件</th>
+                <th>认证账号</th>
                 <th>客户端 Key</th>
                 <th class="num">Tokens</th>
-                <th class="num">费用 (USD)</th>
+                <th class="num">费用</th>
                 <th class="num">延迟</th>
                 <th style="text-align: center;">明细</th>
               </tr>
             </thead>
             <tbody id="logsTableBody">
-              <tr><td colspan="10" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无日志记录</td></tr>
+              <tr><td colspan="11" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无日志记录</td></tr>
             </tbody>
           </table>
         </div>
@@ -1125,7 +1420,7 @@
     <div class="modal-card">
       <div class="modal-header">
         <h3 style="font-size: 14px; font-weight: 600;">清理历史使用量数据</h3>
-        <button id="closeCleanupModal" class="action-btn" style="padding: 2px 8px; font-size: 11px;">✕</button>
+        <button id="closeCleanupModal" class="modal-close" title="关闭">✕</button>
       </div>
       <div class="modal-body">
         <p style="color: var(--text-secondary); font-size: 13px;">
@@ -1164,14 +1459,267 @@
     <div class="modal-card">
       <div class="modal-header">
         <h3 id="modalTitle" style="font-size: 13.5px; font-weight: 600;">请求明细</h3>
-        <button id="modalClose" class="action-btn" style="padding: 2px 8px; font-size: 11px;">✕</button>
+        <button id="modalClose" class="modal-close" title="关闭">✕</button>
       </div>
       <div class="modal-body">
+        <div id="modalIntegrityBanner" style="display: none;"></div>
         <div class="modal-grid" id="modalGrid"></div>
+        <div id="modalTelemetrySection" style="display: none; border-top: 1px dashed var(--border-color); padding-top: 10px;">
+          <div class="cell-label" style="margin-bottom: 6px;">上游遥测与配额状态</div>
+          <div class="modal-grid" id="modalTelemetryGrid"></div>
+        </div>
         <div id="modalErrorSection" style="display: none;">
-          <div class="cell-label" style="color: var(--error-color); margin-bottom: 4px;">上游错误响应</div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <div class="cell-label" style="color: var(--error-color);">上游错误响应</div>
+            <button id="btnCopyErrorBody" class="action-btn" style="padding: 1px 7px; font-size: 11px;">复制响应</button>
+          </div>
           <pre class="code-viewer" id="modalErrorBody"></pre>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pricing Center Modal -->
+  <div id="pricesModal" class="modal-backdrop">
+    <div class="modal-card modal-card-large">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h3 style="font-size: 14px; font-weight: 600;">动态价格中心</h3>
+          <span class="badge badge-neutral" id="pricesCountBadge">0 模型</span>
+        </div>
+        <button id="closePricesModal" class="modal-close" title="关闭">✕</button>
+      </div>
+      <div class="modal-body" style="gap: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div style="display: flex; gap: 8px; flex: 1; max-width: 420px; align-items: center;">
+            <input type="search" id="priceSearchInput" class="form-input" placeholder="按模型名搜索价格..." style="flex: 1; height: 32px;">
+            <div class="cpa-dropdown" id="dropdownPriceSource"></div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button id="btnOpenSyncPrices" class="action-btn" style="font-weight: 500;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              在线同步最新价格
+            </button>
+            <button id="btnToggleAddPrice" class="action-btn" style="font-weight: 500;">+ 添加自定义价格</button>
+          </div>
+        </div>
+
+        <!-- Sync Prices Panel (Collapsible) -->
+        <div id="syncPricesPanel" style="display: none; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-tertiary);">
+          <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">在线同步官方模型价格</div>
+          <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <div class="cpa-dropdown" id="dropdownSyncSource"></div>
+            <input type="text" id="syncCustomUrlInput" class="form-input" placeholder="https://..." style="flex: 1; height: 32px; display: none;">
+            <button id="btnExecuteSync" class="action-btn" style="height: 32px; font-weight: 600;">开始同步</button>
+            <span id="syncStatusMsg" style="font-size: 12px; color: var(--text-secondary);"></span>
+          </div>
+        </div>
+
+        <!-- Add / Edit Custom Price Form (Collapsible) -->
+        <div id="addPriceFormPanel" style="display: none; padding: 12px; border: 1px solid var(--border-color); border-radius: 8px; background: var(--bg-tertiary);">
+          <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;" id="priceFormTitle">添加或覆盖模型价格</div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 8px;">
+            <div>
+              <label class="form-label">模型名称</label>
+              <input type="text" id="customPriceModel" class="form-input" placeholder="如 gpt-4o" style="width: 100%; height: 30px;">
+            </div>
+            <div>
+              <label class="form-label">输入价格 ($/1M)</label>
+              <input type="number" step="0.0001" id="customPriceInput" class="form-input" placeholder="2.50" style="width: 100%; height: 30px;">
+            </div>
+            <div>
+              <label class="form-label">输出价格 ($/1M)</label>
+              <input type="number" step="0.0001" id="customPriceOutput" class="form-input" placeholder="10.00" style="width: 100%; height: 30px;">
+            </div>
+            <div>
+              <label class="form-label">缓存命中读 ($/1M)</label>
+              <input type="number" step="0.0001" id="customPriceCacheRead" class="form-input" placeholder="1.25" style="width: 100%; height: 30px;">
+            </div>
+            <div>
+              <label class="form-label">缓存写入 ($/1M)</label>
+              <input type="number" step="0.0001" id="customPriceCacheWrite" class="form-input" placeholder="2.50" style="width: 100%; height: 30px;">
+            </div>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px;">
+            <button id="btnCancelCustomPrice" class="action-btn" style="height: 28px; font-size: 12px;">取消</button>
+            <button id="btnSaveCustomPrice" class="action-btn" style="height: 28px; font-size: 12px; font-weight: 600;">保存定价覆盖</button>
+          </div>
+        </div>
+
+        <div class="table-container" style="max-height: 52vh; overflow-y: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>模型名称</th>
+                <th>定价来源</th>
+                <th class="num">输入价格 ($/1M)</th>
+                <th class="num">输出价格 ($/1M)</th>
+                <th class="num">缓存读取 ($/1M)</th>
+                <th class="num">缓存写入 ($/1M)</th>
+                <th>更新时间</th>
+                <th style="text-align: center;">操作</th>
+              </tr>
+            </thead>
+            <tbody id="pricesTableBody">
+              <tr><td colspan="8" style="text-align: center; color: var(--text-tertiary); padding: 32px;">加载价格表中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnClosePricesBottom" class="action-btn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Diagnostics Modal -->
+  <div id="diagnosticsModal" class="modal-backdrop">
+    <div class="modal-card modal-card-large">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <h3 style="font-size: 14px; font-weight: 600;">稳定性与错误诊断</h3>
+        </div>
+        <button id="closeDiagnosticsModal" class="modal-close" title="关闭">✕</button>
+      </div>
+      <div class="modal-body" style="gap: 14px;">
+        <!-- 4 Key Diagnostics Metric Tiles -->
+        <div class="diag-metrics-grid">
+          <div class="diag-metric-box">
+            <div class="diag-metric-label">审计请求总量</div>
+            <div class="diag-metric-value" id="diagTotalRequests">0</div>
+          </div>
+          <div class="diag-metric-box">
+            <div class="diag-metric-label">上游失败调用</div>
+            <div class="diag-metric-value" id="diagFailedRequests" style="color: var(--error-color);">0</div>
+          </div>
+          <div class="diag-metric-box">
+            <div class="diag-metric-label">总体失败率</div>
+            <div class="diag-metric-value" id="diagFailureRate">0.0%</div>
+          </div>
+          <div class="diag-metric-box">
+            <div class="diag-metric-label">平均响应延迟</div>
+            <div class="diag-metric-value" id="diagAvgLatency">0 ms</div>
+          </div>
+          <div class="diag-metric-box" style="cursor: pointer;" onclick="filterMismatchFromDiag()" title="点击前往日志查看全部模型不一致记录">
+            <div class="diag-metric-label">模型不一致异常</div>
+            <div class="diag-metric-value" id="diagModelMismatches" style="color: #d97706;">0</div>
+          </div>
+        </div>
+
+        <!-- Breakdown side-by-side -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; background: var(--bg-tertiary);">
+            <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">HTTP 状态码分布</div>
+            <div id="diagStatusCodesList" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+          </div>
+          <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; background: var(--bg-tertiary);">
+            <div style="font-size: 12px; font-weight: 600; margin-bottom: 8px;">上游错误分类分布</div>
+            <div id="diagErrorKindsList" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+          </div>
+        </div>
+
+        <!-- Recent Failures Table -->
+        <div>
+          <div style="font-size: 12.5px; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+            <span>最近失败调用追踪</span>
+            <span style="font-size: 11.5px; color: var(--text-tertiary);">点击查看上游报错响应及 Trace ID</span>
+          </div>
+          <div class="table-container" style="max-height: 38vh; overflow-y: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>发生时间</th>
+                  <th>状态</th>
+                  <th>模型</th>
+                  <th>认证账号</th>
+                  <th>错误分类</th>
+                  <th>错误摘要</th>
+                  <th style="text-align: center;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="diagFailuresTableBody">
+                <tr><td colspan="7" style="text-align: center; color: var(--text-tertiary); padding: 24px;">暂无失败记录</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCloseDiagnosticsBottom" class="action-btn">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Hub (Import & Export) Modal -->
+  <div id="dataHubModal" class="modal-backdrop">
+    <div class="modal-card modal-card-medium">
+      <div class="modal-header">
+        <h3 style="font-size: 14px; font-weight: 600;">数据迁移与备份</h3>
+        <button id="closeDataHubModal" class="modal-close" title="关闭">✕</button>
+      </div>
+      <div class="modal-body" style="gap: 14px;">
+        <div class="segmented-control" style="width: 100%;">
+          <button class="segment-btn active" id="btnHubTabExport" style="flex: 1;">数据导出与备份</button>
+          <button class="segment-btn" id="btnHubTabImport" style="flex: 1;">数据导入与迁移</button>
+        </div>
+
+        <!-- Panel 1: Export -->
+        <div id="dataHubExportPanel" style="display: flex; flex-direction: column; gap: 12px;">
+          <p style="color: var(--text-secondary); font-size: 12.5px; line-height: 1.6;">
+            支持导出 SQLite 中保存的模型调用、Token 吞吐、费用核算与认证遥测明细。
+          </p>
+          <div class="form-row">
+            <label class="form-label">导出格式</label>
+            <div class="segmented-control" id="exportFormatControl" style="width: fit-content;">
+              <button type="button" class="segment-btn active" data-val="csv">CSV 表格</button>
+              <button type="button" class="segment-btn" data-val="jsonl">JSONL 行记录</button>
+              <button type="button" class="segment-btn" data-val="json">JSON 数组</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">导出数据范围</label>
+            <div class="segmented-control" id="exportScopeControl" style="width: fit-content;">
+              <button type="button" class="segment-btn active" data-val="filtered">当前筛选范围</button>
+              <button type="button" class="segment-btn" data-val="all">全量历史数据</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">单次导出上限</label>
+            <div class="cpa-dropdown full-width" id="dropdownExportLimit"></div>
+          </div>
+          <div style="margin-top: 6px;">
+            <button id="btnExecuteExport" class="action-btn" style="width: 100%; height: 34px; justify-content: center; font-weight: 600;">
+              立即生成并下载数据文件
+            </button>
+          </div>
+        </div>
+
+        <!-- Panel 2: Import -->
+        <div id="dataHubImportPanel" style="display: none; flex-direction: column; gap: 12px;">
+          <p style="color: var(--text-secondary); font-size: 12.5px; line-height: 1.6;">
+            支持导入 cpa-usage 历史备份以及 <strong>CPA-Manager-Plus</strong> 的调用事件导出文件（.json 或 .jsonl）。
+            系统内置<strong>自动指纹与 Session 去重机制</strong>，重复导入不会产生多余数据。
+          </p>
+          <div id="importDropZone" class="drop-zone">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color: var(--text-tertiary); margin-bottom: 6px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <div style="font-size: 13px; font-weight: 500; color: var(--text-primary);">拖拽备份文件至此处，或点击浏览文件</div>
+            <div style="font-size: 11.5px; color: var(--text-tertiary); margin-top: 4px;">支持 .json、.jsonl 文件格式</div>
+            <input type="file" id="importFileInput" accept=".json,.jsonl,.txt" style="display: none;">
+          </div>
+          <div id="selectedFileInfo" style="display: none; padding: 8px 12px; background: var(--bg-tertiary); border-radius: 6px; font-size: 12px; align-items: center; justify-content: space-between;">
+            <span id="selectedFileName" class="font-mono"></span>
+            <button id="btnClearSelectedFile" class="action-btn" style="padding: 2px 6px; font-size: 11px;">清除</button>
+          </div>
+          <div id="importResultBox" style="display: none; padding: 10px 14px; border-radius: 8px; font-size: 12.5px;"></div>
+          <div>
+            <button id="btnExecuteImport" class="action-btn" style="width: 100%; height: 34px; justify-content: center; font-weight: 600;" disabled>
+              开始导入并去重合入
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btnCloseDataHubBottom" class="action-btn">关闭</button>
       </div>
     </div>
   </div>
@@ -1232,8 +1780,305 @@
       logsData: [],
       modelsData: [],
       authsData: [],
-      keysData: []
+      keysData: [],
+      integrityPage: 1,
+      integrityTotal: 0,
+      integrityRecords: []
     };
+
+    let currentLang = 'zh-CN';
+    try {
+      currentLang = localStorage.getItem('cpa-usage:lang') || 'zh-CN';
+    } catch (e) {}
+
+    const I18N = {
+      'zh-CN': {
+        page_title: '使用量与计费',
+        page_desc: '实时模型调用审计、Token 吞吐分布与成本核算',
+        range_24h: '24 小时',
+        range_7d: '7 天',
+        range_30d: '30 天',
+        range_all: '全部',
+        btn_refresh: '刷新',
+        btn_prices: '价格中心',
+        btn_diagnostics: '稳定性诊断',
+        btn_datahub: '数据迁移',
+        btn_cleanup: '数据清理',
+        auto_refresh_off: '自动刷新: 关',
+        auto_refresh_5s: '5s 刷新',
+        auto_refresh_15s: '15s 刷新',
+        auto_refresh_30s: '30s 刷新',
+        kpi_cost_label: '预估总支出',
+        kpi_cost_hint: '实时计费 · 缓存减免已折算',
+        kpi_requests_label: '调用总次数',
+        kpi_tokens_label: 'Token 消耗总量',
+        kpi_cache_label: '缓存读取命中',
+        kpi_tokens_in: '输入',
+        kpi_tokens_out: '输出',
+        kpi_cache_write: '缓存写入',
+        kpi_success_rate: '成功率',
+        kpi_failed_count: '失败',
+        tab_overview: '概览走势',
+        tab_models: '模型透视',
+        tab_integrity: '模型一致性',
+        tab_providers: 'AI 提供商',
+        tab_auths: '认证账号与健康',
+        tab_keys: '客户端 Key',
+        tab_logs: '调用日志',
+        search_placeholder: '搜索模型 / 账号 / Key / 错误...',
+        status_all: '全部状态',
+        status_success: '仅成功 (200 OK)',
+        status_failed: '仅异常 (4xx/5xx)',
+        status_mismatch: '模型不一致',
+        interval_hour: '按小时',
+        interval_min: '按分钟',
+        interval_day: '按天',
+        active_filters_prefix: '当前组合筛选：',
+        btn_reset_filters: '重置全部筛选',
+        trend_chart_title: '请求量与费用走势',
+        pie_chart_title: '模型消耗占比',
+        rank_chart_title: '调用排行',
+        rank_models: '按模型',
+        rank_auths: '按账号',
+        col_model: '模型名称',
+        col_requests: '请求次数',
+        col_failed: '失败次数',
+        col_total_tokens: '总 Token',
+        col_cost: '预估费用',
+        col_latency: '平均延迟',
+        col_action: '操作',
+        col_provider: 'AI 提供商',
+        col_auth_id: '认证账号',
+        col_status: '健康状态',
+        col_quota_5h: '5小时配额',
+        col_quota_week: '周配额',
+        col_api_key: '客户端 Key',
+        col_last_used: '最后使用时间',
+        col_time: '请求时间',
+        col_routed_model: '请求 / 路由模型',
+        col_response_model: '实际响应模型',
+        col_detail: '明细',
+        integrity_total_requests: '审计请求总量',
+        integrity_total_hint: '当前时间范围内记录的所有调用',
+        integrity_match_rate: '一致率',
+        integrity_match_hint: '实际响应模型与请求/目标完全吻合',
+        integrity_mismatch_count: '模型不一致异常',
+        integrity_mismatch_hint: '疑似被上游降级、替换或掺水',
+        integrity_coverage_label: '响应标识解析率',
+        integrity_coverage_hint: '上游成功回传真实模型签名',
+        integrity_patterns_title: '模型置换与降级模式',
+        integrity_patterns_desc: '实时汇总检测到的所有上游实际返回模型偏离预期目标的组合关系',
+        integrity_btn_refresh: '刷新检测',
+        integrity_empty_patterns: '当前未检测到任何模型不一致或降级记录。所有渠道实际返回模型均与预期路由目标吻合。',
+        integrity_stream_title: '模型不一致调用明细',
+        integrity_stream_desc: '专门追踪被判定为模型不一致的单次调用快照',
+        integrity_empty_logs: '当前范围内暂无模型不一致记录',
+        btn_prev: '上一页',
+        btn_next: '下一页',
+        btn_close: '关闭',
+        detail_title: '请求明细',
+        detail_integrity_title: '模型一致性异常警示',
+        detail_integrity_mismatch_badge: '疑似渠道降级 / 掺水',
+        detail_integrity_pass_title: '模型一致性校验通过',
+        detail_integrity_pass_badge: '一致',
+        detail_mismatch: '模型不一致',
+        detail_match: '一致',
+        detail_unreported: '未提供',
+        detail_error_title: '上游错误响应',
+        detail_btn_copy: '复制响应',
+        diag_title: '稳定性与错误诊断',
+        diag_total: '审计请求总量',
+        diag_failed: '上游失败调用',
+        diag_fail_rate: '总体失败率',
+        diag_latency: '平均响应延迟',
+        diag_mismatches: '模型不一致异常',
+        diag_status_codes: 'HTTP 状态码分布',
+        diag_error_kinds: '上游错误分类分布',
+        diag_recent_failures: '最近失败调用追踪',
+        diag_no_failures: '当前筛选范围内无失败记录',
+        prices_title: '动态价格中心',
+        prices_btn_sync: '在线同步官方价格',
+        prices_btn_add: '添加自定义价格',
+        prices_search_placeholder: '按模型名搜索价格...',
+        prices_source_all: '全来源',
+        prices_source_builtin: '内置默认',
+        prices_source_custom: '自定义覆盖',
+        prices_source_synced: '在线同步',
+        prices_empty: '暂无匹配价格记录',
+        datahub_title: '数据迁移与备份',
+        datahub_tab_export: '数据导出与备份',
+        datahub_tab_import: '数据导入与迁移',
+        datahub_export_desc: '支持导出 SQLite 中保存的模型调用、Token 吞吐、费用核算与认证遥测明细。',
+        datahub_btn_export: '开始导出下载',
+        datahub_btn_import: '开始导入并去重合入',
+        cleanup_title: '清理历史使用量数据',
+        cleanup_desc: '定期清理过期使用量数据有助于减小 SQLite 文件体积并保持查询高效。',
+        cleanup_btn_date: '删除此日期之前记录',
+        cleanup_btn_days: '删除此天数之前记录',
+        cleanup_btn_all: '清空数据库内全部记录',
+        all_models: '全部模型',
+        all_providers: '全部提供商',
+        all_keys: '全部客户端 Key',
+        all_auths: '全部认证文件'
+      },
+      'en': {
+        page_title: 'Usage & Billing',
+        page_desc: 'Real-time model audit, token throughput analysis and cost accounting',
+        range_24h: '24 Hours',
+        range_7d: '7 Days',
+        range_30d: '30 Days',
+        range_all: 'All',
+        btn_refresh: 'Refresh',
+        btn_prices: 'Pricing',
+        btn_diagnostics: 'Diagnostics',
+        btn_datahub: 'Data Hub',
+        btn_cleanup: 'Cleanup',
+        auto_refresh_off: 'Auto Refresh: Off',
+        auto_refresh_5s: '5s Refresh',
+        auto_refresh_15s: '15s Refresh',
+        auto_refresh_30s: '30s Refresh',
+        kpi_cost_label: 'Estimated Cost',
+        kpi_cost_hint: 'Real-time · Prompt cache discounted',
+        kpi_requests_label: 'Total Requests',
+        kpi_tokens_label: 'Total Tokens',
+        kpi_cache_label: 'Cache Hits',
+        kpi_tokens_in: 'Input',
+        kpi_tokens_out: 'Output',
+        kpi_cache_write: 'Cache Write',
+        kpi_success_rate: 'Success Rate',
+        kpi_failed_count: 'Failed',
+        tab_overview: 'Overview',
+        tab_models: 'Models',
+        tab_integrity: 'Model Integrity',
+        tab_providers: 'Providers',
+        tab_auths: 'Accounts & Health',
+        tab_keys: 'Client Keys',
+        tab_logs: 'Logs',
+        search_placeholder: 'Search models / accounts / keys / errors...',
+        status_all: 'All Status',
+        status_success: 'Success (200 OK)',
+        status_failed: 'Errors (4xx/5xx)',
+        status_mismatch: 'Model Mismatch',
+        interval_hour: 'Hourly',
+        interval_min: 'Minutely',
+        interval_day: 'Daily',
+        active_filters_prefix: 'Active Filters:',
+        btn_reset_filters: 'Reset All Filters',
+        trend_chart_title: 'Requests & Cost Trend',
+        pie_chart_title: 'Model Cost Distribution',
+        rank_chart_title: 'Top Rankings',
+        rank_models: 'By Model',
+        rank_auths: 'By Account',
+        col_model: 'Model',
+        col_requests: 'Requests',
+        col_failed: 'Failures',
+        col_total_tokens: 'Total Tokens',
+        col_cost: 'Cost',
+        col_latency: 'Avg Latency',
+        col_action: 'Action',
+        col_provider: 'Provider',
+        col_auth_id: 'Account',
+        col_status: 'Health Status',
+        col_quota_5h: '5h Quota',
+        col_quota_week: 'Weekly Quota',
+        col_api_key: 'API Key',
+        col_last_used: 'Last Used',
+        col_time: 'Time',
+        col_routed_model: 'Requested / Routed Model',
+        col_response_model: 'Response Model',
+        col_detail: 'Detail',
+        integrity_total_requests: 'Total Audited',
+        integrity_total_hint: 'All calls recorded within selected range',
+        integrity_match_rate: 'Match Rate',
+        integrity_match_hint: 'Response model strictly matches request target',
+        integrity_mismatch_count: 'Model Mismatches',
+        integrity_mismatch_hint: 'Suspected upstream downgrade or substitution',
+        integrity_coverage_label: 'Response Signature Coverage',
+        integrity_coverage_hint: 'Upstream returned verifiable model signatures',
+        integrity_patterns_title: 'Model Substitution Patterns',
+        integrity_patterns_desc: 'Real-time aggregation of detected model deviations from expected targets',
+        integrity_btn_refresh: 'Refresh Audit',
+        integrity_empty_patterns: 'No model mismatches or downgrades detected. All responses match expected targets.',
+        integrity_stream_title: 'Mismatch Event Stream',
+        integrity_stream_desc: 'Event stream of calls flagged with model mismatches',
+        integrity_empty_logs: 'No model mismatch records found in this range',
+        btn_prev: 'Previous',
+        btn_next: 'Next',
+        btn_close: 'Close',
+        detail_title: 'Request Details',
+        detail_integrity_title: 'Model Mismatch Warning',
+        detail_integrity_mismatch_badge: 'Suspected Downgrade / Substitution',
+        detail_integrity_pass_title: 'Model Integrity Verified',
+        detail_integrity_pass_badge: 'Consistent',
+        detail_mismatch: 'Mismatch',
+        detail_match: 'Match',
+        detail_unreported: 'Unreported',
+        detail_error_title: 'Upstream Error Response',
+        detail_btn_copy: 'Copy Response',
+        diag_title: 'Diagnostics & Health',
+        diag_total: 'Total Audited Requests',
+        diag_failed: 'Failed Calls',
+        diag_fail_rate: 'Failure Rate',
+        diag_latency: 'Avg Latency',
+        diag_mismatches: 'Model Mismatches',
+        diag_status_codes: 'HTTP Status Code Distribution',
+        diag_error_kinds: 'Error Category Distribution',
+        diag_recent_failures: 'Recent Failure Logs',
+        diag_no_failures: 'No failed calls within current filter range',
+        prices_title: 'Pricing Engine',
+        prices_btn_sync: 'Sync Online Prices',
+        prices_btn_add: 'Add Custom Override',
+        prices_search_placeholder: 'Search model name...',
+        prices_source_all: 'All Sources',
+        prices_source_builtin: 'Built-in Default',
+        prices_source_custom: 'Custom Override',
+        prices_source_synced: 'Online Synced',
+        prices_empty: 'No matching pricing records',
+        datahub_title: 'Data Hub & Backup',
+        datahub_tab_export: 'Export & Backup',
+        datahub_tab_import: 'Import & Migrate',
+        datahub_export_desc: 'Export usage records, token counts, cost accounting and telemetry stored in SQLite.',
+        datahub_btn_export: 'Start Download',
+        datahub_btn_import: 'Start Import & Deduplicate',
+        cleanup_title: 'Data Cleanup',
+        cleanup_desc: 'Periodically cleaning historical logs reduces SQLite file size and keeps queries fast.',
+        cleanup_btn_date: 'Delete Records Before Date',
+        cleanup_btn_days: 'Delete Records Older Than Days',
+        cleanup_btn_all: 'Clear All Database Records',
+        all_models: 'All Models',
+        all_providers: 'All Providers',
+        all_keys: 'All API Keys',
+        all_auths: 'All Auth Files'
+      }
+    };
+
+    function t(key) {
+      return (I18N[currentLang] && I18N[currentLang][key]) || (I18N['zh-CN'] && I18N['zh-CN'][key]) || key;
+    }
+
+    function setLanguage(lang) {
+      currentLang = lang;
+      try { localStorage.setItem('cpa-usage:lang', lang); } catch (e) {}
+      document.documentElement.lang = lang;
+      applyI18N();
+      initDropdowns();
+      loadActiveTabData();
+    }
+
+    function applyI18N() {
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const k = el.getAttribute('data-i18n');
+        if (k) el.textContent = t(k);
+      });
+
+      const s = document.getElementById('filterSearch');
+      if (s) s.placeholder = t('search_placeholder');
+
+      const ps = document.getElementById('priceSearchInput');
+      if (ps) ps.placeholder = t('prices_search_placeholder');
+
+      syncDropdownsFromState();
+    }
 
     // ---- Boot configuration, injected by the plugin when serving this page ----
     const BOOT = (() => {
@@ -1369,7 +2214,11 @@
       if (state.filterAuthID) params.set('auth_id', state.filterAuthID);
       if (state.filterProvider) params.set('provider', state.filterProvider);
       if (state.filterModel) params.set('model', state.filterModel);
-      if (state.filterStatus !== '') params.set('failed', state.filterStatus);
+      if (state.filterStatus === 'mismatch') {
+        params.set('mismatch', 'true');
+      } else if (state.filterStatus !== '') {
+        params.set('failed', state.filterStatus);
+      }
       if (state.searchQuery) params.set('search', state.searchQuery);
 
       return params;
@@ -1394,9 +2243,11 @@
         chips.push({ key: 'model', label: `模型: ${state.filterModel}`, onRemove: () => { state.filterModel = ''; } });
       }
       if (state.filterStatus === 'false') {
-        chips.push({ key: 'status', label: '仅成功 (200 OK)', onRemove: () => { state.filterStatus = ''; } });
+        chips.push({ key: 'status', label: '仅成功 (200 OK)', onRemove: () => { state.filterStatus = ''; syncDropdownsFromState(); updateActiveFilterChips(); state.page = 1; loadActiveTabData(); } });
       } else if (state.filterStatus === 'true') {
-        chips.push({ key: 'status', label: '仅异常 (4xx/5xx)', onRemove: () => { state.filterStatus = ''; } });
+        chips.push({ key: 'status', label: '仅异常 (4xx/5xx)', onRemove: () => { state.filterStatus = ''; syncDropdownsFromState(); updateActiveFilterChips(); state.page = 1; loadActiveTabData(); } });
+      } else if (state.filterStatus === 'mismatch') {
+        chips.push({ key: 'status', label: '状态: 模型不一致', onRemove: () => { state.filterStatus = ''; syncDropdownsFromState(); updateActiveFilterChips(); state.page = 1; loadActiveTabData(); } });
       }
       if (state.searchQuery) {
         chips.push({ key: 'search', label: `搜索: "${state.searchQuery}"`, onRemove: () => { state.searchQuery = ''; const s = document.getElementById('filterSearch'); if (s) s.value = ''; } });
@@ -1421,10 +2272,11 @@
     function syncDropdownsFromState() {
       renderDynamicDropdowns(state.cachedOptions);
       renderCustomDropdown('dropdownStatus', [
-        { label: '全部状态', value: '' },
-        { label: '仅成功 (200 OK)', value: 'false' },
-        { label: '仅异常 (4xx/5xx)', value: 'true' }
-      ], state.filterStatus, '全部状态', (val) => {
+        { label: t('status_all'), value: '' },
+        { label: t('status_success'), value: 'false' },
+        { label: t('status_failed'), value: 'true' },
+        { label: t('status_mismatch'), value: 'mismatch' }
+      ], state.filterStatus, t('status_all'), (val) => {
         state.filterStatus = val;
         updateActiveFilterChips();
         state.page = 1;
@@ -1517,11 +2369,11 @@
     function initDropdowns() {
       // Auto Refresh
       renderCustomDropdown('dropdownAutoRefresh', [
-        { label: '自动刷新: 关', value: '0' },
-        { label: '5s 刷新', value: '5' },
-        { label: '15s 刷新', value: '15' },
-        { label: '30s 刷新', value: '30' }
-      ], '15', '自动刷新: 关', (val) => {
+        { label: t('auto_refresh_off'), value: '0' },
+        { label: t('auto_refresh_5s'), value: '5' },
+        { label: t('auto_refresh_15s'), value: '15' },
+        { label: t('auto_refresh_30s'), value: '30' }
+      ], '15', t('auto_refresh_off'), (val) => {
         if (state.timer) clearInterval(state.timer);
         const sec = parseInt(val);
         if (sec > 0) {
@@ -1531,10 +2383,11 @@
 
       // Status Filter
       renderCustomDropdown('dropdownStatus', [
-        { label: '全部状态', value: '' },
-        { label: '仅成功 (200 OK)', value: 'false' },
-        { label: '仅异常 (4xx/5xx)', value: 'true' }
-      ], state.filterStatus, '全部状态', (val) => {
+        { label: t('status_all'), value: '' },
+        { label: t('status_success'), value: 'false' },
+        { label: t('status_failed'), value: 'true' },
+        { label: t('status_mismatch'), value: 'mismatch' }
+      ], state.filterStatus, t('status_all'), (val) => {
         state.filterStatus = val;
         updateActiveFilterChips();
         state.page = 1;
@@ -1543,12 +2396,53 @@
 
       // Interval Filter
       renderCustomDropdown('dropdownInterval', [
-        { label: '按分钟', value: 'minute' },
-        { label: '按小时', value: 'hour' },
-        { label: '按天', value: 'day' }
-      ], 'hour', '按小时', (val) => {
+        { label: t('interval_min'), value: 'minute' },
+        { label: t('interval_hour'), value: 'hour' },
+        { label: t('interval_day'), value: 'day' }
+      ], 'hour', t('interval_hour'), (val) => {
         state.interval = val;
         loadTimeSeries();
+      });
+
+      // Language Selector
+      renderCustomDropdown('dropdownLang', [
+        { label: '简体中文', value: 'zh-CN' },
+        { label: 'English', value: 'en' }
+      ], currentLang, currentLang === 'en' ? 'English' : '简体中文', (val) => {
+        setLanguage(val);
+      }, true, true);
+
+      // Price Source Filter inside Price Modal
+      renderCustomDropdown('dropdownPriceSource', [
+        { label: t('prices_source_all'), value: '' },
+        { label: t('prices_source_builtin'), value: 'builtin' },
+        { label: t('prices_source_synced'), value: 'synced' },
+        { label: t('prices_source_custom'), value: 'custom' }
+      ], state.priceSourceFilter || '', t('prices_source_all'), (val) => {
+        state.priceSourceFilter = val;
+        renderPricesTable();
+      });
+
+      // Sync Source Selector inside Price Modal
+      renderCustomDropdown('dropdownSyncSource', [
+        { label: 'LiteLLM 官方全源 (推荐)', value: 'litellm' },
+        { label: 'OpenRouter 源', value: 'openrouter' },
+        { label: 'models.dev 源', value: 'models.dev' },
+        { label: '自定义 JSON URL', value: 'custom' }
+      ], state.syncSource || 'litellm', 'LiteLLM 官方全源 (推荐)', (val) => {
+        state.syncSource = val;
+        const isCustom = val === 'custom';
+        const urlInput = document.getElementById('syncCustomUrlInput');
+        if (urlInput) urlInput.style.display = isCustom ? 'block' : 'none';
+      });
+
+      // Export Limit Dropdown inside Data Hub Modal
+      renderCustomDropdown('dropdownExportLimit', [
+        { label: '10,000 条记录', value: '10000' },
+        { label: '50,000 条记录 (推荐)', value: '50000' },
+        { label: '100,000 条记录', value: '100000' }
+      ], state.exportLimit || '50000', '50,000 条记录 (推荐)', (val) => {
+        state.exportLimit = val;
       });
 
       // Placeholders for dynamic dropdowns
@@ -1556,32 +2450,33 @@
     }
 
     function renderDynamicDropdowns(data) {
-      const keyOpts = [{ label: '全部客户端 Key', value: '' }, ...(data.api_keys || []).map(k => ({ label: k, value: k }))];
-      renderCustomDropdown('dropdownAPIKey', keyOpts, state.filterAPIKey, '全部客户端 Key', (val) => {
+      state.cachedOptions = data || state.cachedOptions || {};
+      const keyOpts = [{ label: t('all_keys'), value: '' }, ...((data && data.api_keys) || []).map(k => ({ label: k, value: k }))];
+      renderCustomDropdown('dropdownAPIKey', keyOpts, state.filterAPIKey, t('all_keys'), (val) => {
         state.filterAPIKey = val;
         updateActiveFilterChips();
         state.page = 1;
         loadActiveTabData();
       });
 
-      const authOpts = [{ label: '全部认证文件', value: '' }, ...(data.auth_ids || []).map(a => ({ label: a, value: a }))];
-      renderCustomDropdown('dropdownAuthID', authOpts, state.filterAuthID, '全部认证文件', (val) => {
+      const authOpts = [{ label: t('all_auths'), value: '' }, ...((data && data.auth_ids) || []).map(a => ({ label: a, value: a }))];
+      renderCustomDropdown('dropdownAuthID', authOpts, state.filterAuthID, t('all_auths'), (val) => {
         state.filterAuthID = val;
         updateActiveFilterChips();
         state.page = 1;
         loadActiveTabData();
       });
 
-      const provOpts = [{ label: '全部提供商', value: '' }, ...(data.providers || []).map(p => ({ label: p, value: p }))];
-      renderCustomDropdown('dropdownProvider', provOpts, state.filterProvider, '全部提供商', (val) => {
+      const provOpts = [{ label: t('all_providers'), value: '' }, ...((data && data.providers) || []).map(p => ({ label: p, value: p }))];
+      renderCustomDropdown('dropdownProvider', provOpts, state.filterProvider, t('all_providers'), (val) => {
         state.filterProvider = val;
         updateActiveFilterChips();
         state.page = 1;
         loadActiveTabData();
       });
 
-      const modelOpts = [{ label: '全部模型', value: '' }, ...(data.models || []).map(m => ({ label: m, value: m }))];
-      renderCustomDropdown('dropdownModel', modelOpts, state.filterModel, '全部模型', (val) => {
+      const modelOpts = [{ label: t('all_models'), value: '' }, ...((data && data.models) || []).map(m => ({ label: m, value: m }))];
+      renderCustomDropdown('dropdownModel', modelOpts, state.filterModel, t('all_models'), (val) => {
         state.filterModel = val;
         updateActiveFilterChips();
         state.page = 1;
@@ -1817,7 +2712,7 @@
           <td class="num font-mono text-emerald"><strong>${formatCost(m.total_cost)}</strong></td>
           <td class="num font-mono">${m.avg_latency_ms.toFixed(0)} ms</td>
           <td style="text-align: center;">
-            <button class="btn-drill" onclick="focusModel(${jsArg(m.model)})">分析走势 →</button>
+            <button class="table-btn" onclick="focusModel(${jsArg(m.model)})">分析走势 →</button>
           </td>
         </tr>
       `).join('');
@@ -1853,7 +2748,7 @@
           <td class="num font-mono text-emerald"><strong>${formatCost(item.total_cost)}</strong></td>
           <td class="num font-mono">${(item.count > 0 ? (item.latency_sum / item.count).toFixed(0) : 0)} ms</td>
           <td style="text-align: center;">
-            <button class="btn-drill" onclick="focusProvider(${jsArg(item.provider)})">聚焦分析 →</button>
+            <button class="table-btn" onclick="focusProvider(${jsArg(item.provider)})">聚焦分析 →</button>
           </td>
         </tr>
       `).join('');
@@ -1891,36 +2786,188 @@
       }
     }
 
+    function renderAuthsHealthSummary() {
+      const banner = document.getElementById('authHealthSummaryBanner');
+      if (!banner) return;
+      const s = (state.authsHealthData && state.authsHealthData.summary) || {
+        total_accounts: (state.authsData || []).length,
+        healthy_count: 0,
+        low_quota_count: 0,
+        cooldown_count: 0,
+        exhausted_count: 0,
+        reauth_count: 0,
+        error_count: 0,
+        unknown_count: 0
+      };
+
+      const currentFilter = state.authsFilterStatus || '';
+      banner.innerHTML = `
+        <div class="health-stat-pill ${currentFilter === '' ? 'active' : ''}" onclick="filterAuthsByStatus('')">
+          <span>全部账号</span><strong>${s.total_accounts}</strong>
+        </div>
+        <div class="health-stat-pill ${currentFilter === 'available' ? 'active' : ''}" onclick="filterAuthsByStatus('available')">
+          <span style="color:var(--success-color);">●</span> <span>正常</span><strong>${s.healthy_count}</strong>
+        </div>
+        ${s.low_quota_count > 0 ? `
+          <div class="health-stat-pill ${currentFilter === 'low_quota' ? 'active' : ''}" onclick="filterAuthsByStatus('low_quota')">
+            <span>额度紧张</span><strong style="color:var(--warning-color);">${s.low_quota_count}</strong>
+          </div>
+        ` : ''}
+        <div class="health-stat-pill ${currentFilter === 'cooldown' ? 'active' : ''}" onclick="filterAuthsByStatus('cooldown')">
+          <span>冷却中</span><strong style="color:var(--warning-color);">${s.cooldown_count}</strong>
+        </div>
+        <div class="health-stat-pill ${currentFilter === 'exhausted' ? 'active' : ''}" onclick="filterAuthsByStatus('exhausted')">
+          <span>配额耗尽</span><strong style="color:var(--error-color);">${s.exhausted_count}</strong>
+        </div>
+        ${s.reauth_count > 0 ? `
+          <div class="health-stat-pill ${currentFilter === 'reauth_needed' ? 'active' : ''}" onclick="filterAuthsByStatus('reauth_needed')" style="border-color: rgba(239, 68, 68, 0.4); background: rgba(239, 68, 68, 0.08);">
+            <span style="color:#ef4444; font-weight:600;">需重登</span><strong style="color:#ef4444;">${s.reauth_count}</strong>
+          </div>
+        ` : ''}
+        ${s.error_count > 0 ? `
+          <div class="health-stat-pill ${currentFilter === 'error' ? 'active' : ''}" onclick="filterAuthsByStatus('error')">
+            <span>服务异常</span><strong style="color:var(--error-color);">${s.error_count}</strong>
+          </div>
+        ` : ''}
+      `;
+    }
+
+    window.filterAuthsByStatus = function(status) {
+      state.authsFilterStatus = status;
+      renderAuthsHealthSummary();
+      renderAuthsTable();
+    };
+
     function renderAuthsTable() {
       updateSortIndicators('auths');
       const tbody = document.getElementById('authsTableBody');
-      const data = sortList(state.authsData || [], sortState.auths.field, sortState.auths.asc);
+      if (!tbody) return;
+
+      const healthMap = {};
+      if (state.authsHealthData && state.authsHealthData.accounts) {
+        for (const h of state.authsHealthData.accounts) {
+          healthMap[h.auth_id] = h;
+        }
+      }
+      const quotaMap = {};
+      if (state.authsQuotaData && state.authsQuotaData.quotas) {
+        for (const q of state.authsQuotaData.quotas) {
+          quotaMap[q.auth_id] = q;
+        }
+      }
+
+      let rawList = state.authsData || [];
+      let combined = rawList.map(a => {
+        const h = healthMap[a.auth_id] || {};
+        const q = quotaMap[a.auth_id] || {};
+        return Object.assign({}, a, {
+          status: h.status || 'unknown',
+          status_reason: h.status_reason || '暂无状态',
+          health_score: h.health_score !== undefined ? h.health_score : 100,
+          plan_type: h.plan_type || q.plan_type || '',
+          in_cooldown: h.in_cooldown || q.in_cooldown || false,
+          cooldown_sec: h.cooldown_remaining_seconds || q.cooldown_remaining_seconds || 0,
+          primary_window: q.primary_window || null,
+          secondary_window: q.secondary_window || null
+        });
+      });
+
+      if (state.authsFilterStatus) {
+        combined = combined.filter(item => item.status === state.authsFilterStatus);
+      }
+
+      const data = sortList(combined, sortState.auths.field, sortState.auths.asc);
       if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配数据</td></tr>';
         return;
       }
-      tbody.innerHTML = data.map(a => `
-        <tr>
-          <td class="font-mono"><strong>${esc(a.auth_id)}</strong></td>
-          <td><span class="badge badge-neutral">${esc(a.provider)}</span></td>
-          <td>${esc(a.auth_type) || '—'}</td>
-          <td class="num font-mono">${a.requests.toLocaleString()}</td>
-          <td class="num font-mono">${a.failed_count > 0 ? `<span class="badge badge-danger">${a.failed_count}</span>` : '0'}</td>
-          <td class="num font-mono">${formatNumber(a.total_tokens)}</td>
-          <td class="num font-mono text-emerald"><strong>${formatCost(a.total_cost)}</strong></td>
-          <td class="num font-mono">${a.avg_latency_ms.toFixed(0)} ms</td>
-          <td style="text-align: center;">
-            <button class="btn-drill" onclick="focusAuth(${jsArg(a.auth_id)})">账号走势与模型分布 →</button>
-          </td>
-        </tr>
-      `).join('');
+
+      tbody.innerHTML = data.map(a => {
+        let statusBadge = '';
+        if (a.status === 'reauth_needed') {
+          statusBadge = `<span class="badge badge-reauth" title="${esc(a.status_reason)}">需重登</span>`;
+        } else if (a.status === 'cooldown' || a.in_cooldown) {
+          const remMin = Math.ceil(a.cooldown_sec / 60);
+          const timeText = remMin > 60 ? `${Math.floor(remMin / 60)}h ${remMin % 60}m` : `${remMin}m`;
+          statusBadge = `<span class="badge badge-warning" title="${esc(a.status_reason)}">冷却 (${timeText})</span>`;
+        } else if (a.status === 'exhausted') {
+          statusBadge = `<span class="badge badge-danger" title="${esc(a.status_reason)}">配额耗尽</span>`;
+        } else if (a.status === 'low_quota') {
+          statusBadge = `<span class="badge badge-warning" title="${esc(a.status_reason)}">额度紧张</span>`;
+        } else if (a.status === 'error') {
+          statusBadge = `<span class="badge badge-danger" title="${esc(a.status_reason)}">异常</span>`;
+        } else {
+          statusBadge = `<span class="badge badge-success" title="${esc(a.status_reason)}">正常 (${a.health_score ? a.health_score.toFixed(0) : 100}分)</span>`;
+        }
+
+        let primQuotaHtml = '<span style="color:var(--text-tertiary);">—</span>';
+        if (a.primary_window && a.primary_window.used_percent !== null && a.primary_window.used_percent !== undefined) {
+          const used = a.primary_window.used_percent;
+          let colorClass = 'progress-fill-emerald';
+          if (used >= 90) colorClass = 'progress-fill-red';
+          else if (used >= 75) colorClass = 'progress-fill-amber';
+          else if (used >= 50) colorClass = 'progress-fill-yellow';
+
+          let extraHint = '';
+          if (a.primary_window.reset_after_sec > 0) {
+            const m = Math.ceil(a.primary_window.reset_after_sec / 60);
+            extraHint = `<div style="font-size: 10.5px; color: var(--text-tertiary);">${m > 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm'} 后重置</div>`;
+          }
+          primQuotaHtml = `
+            <div style="font-size: 11.5px; font-family: var(--font-mono);">已用 ${used.toFixed(1)}%</div>
+            <div class="progress-track"><div class="progress-fill ${colorClass}" style="width: ${Math.min(used, 100)}%;"></div></div>
+            ${extraHint}
+          `;
+        }
+
+        let secQuotaHtml = '<span style="color:var(--text-tertiary);">—</span>';
+        if (a.secondary_window && a.secondary_window.used_percent !== null && a.secondary_window.used_percent !== undefined) {
+          const used = a.secondary_window.used_percent;
+          let colorClass = 'progress-fill-emerald';
+          if (used >= 90) colorClass = 'progress-fill-red';
+          else if (used >= 75) colorClass = 'progress-fill-amber';
+          else if (used >= 50) colorClass = 'progress-fill-yellow';
+
+          secQuotaHtml = `
+            <div style="font-size: 11.5px; font-family: var(--font-mono);">已用 ${used.toFixed(1)}%</div>
+            <div class="progress-track"><div class="progress-fill ${colorClass}" style="width: ${Math.min(used, 100)}%;"></div></div>
+          `;
+        }
+
+        const planBadge = a.plan_type ? `<span class="badge badge-purple" style="font-size:10px; margin-left:4px;">${esc(a.plan_type)}</span>` : '';
+
+        return `
+          <tr>
+            <td class="font-mono"><strong>${esc(a.auth_id)}</strong>${planBadge}</td>
+            <td><span class="badge badge-neutral">${esc(a.provider)}</span></td>
+            <td>${statusBadge}</td>
+            <td>${primQuotaHtml}</td>
+            <td>${secQuotaHtml}</td>
+            <td class="num font-mono">${a.requests.toLocaleString()}</td>
+            <td class="num font-mono">${a.failed_count > 0 ? `<span class="badge badge-danger">${a.failed_count}</span>` : '0'}</td>
+            <td class="num font-mono">${formatNumber(a.total_tokens)}</td>
+            <td class="num font-mono text-emerald"><strong>${formatCost(a.total_cost)}</strong></td>
+            <td class="num font-mono">${a.avg_latency_ms ? a.avg_latency_ms.toFixed(0) : 0} ms</td>
+            <td style="text-align: center;">
+              <button class="table-btn" onclick="focusAuth(${jsArg(a.auth_id)})">账号走势 →</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
     async function loadAuths() {
       try {
         const p = getFilterParams();
-        const auths = await fetchJSON(API_BASE + '/auths?' + p.toString());
+        const [auths, healthData, quotaData] = await Promise.all([
+          fetchJSON(API_BASE + '/auths?' + p.toString()).catch(() => []),
+          fetchJSON(API_BASE + '/accounts/health?' + p.toString()).catch(() => null),
+          fetchJSON(API_BASE + '/accounts/quota?' + p.toString()).catch(() => null)
+        ]);
         state.authsData = auths || [];
+        state.authsHealthData = healthData;
+        state.authsQuotaData = quotaData;
+        renderAuthsHealthSummary();
         renderAuthsTable();
       } catch (err) {
         console.error('load auths failed:', err);
@@ -1943,7 +2990,7 @@
           <td class="num font-mono text-emerald"><strong>${formatCost(k.total_cost)}</strong></td>
           <td>${k.last_used_at ? new Date(k.last_used_at).toLocaleString() : '—'}</td>
           <td style="text-align: center;">
-            <button class="btn-drill" onclick="focusKey(${jsArg(k.api_key)})">Key 走势 →</button>
+            <button class="table-btn" onclick="focusKey(${jsArg(k.api_key)})">Key 走势 →</button>
           </td>
         </tr>
       `).join('');
@@ -1974,43 +3021,90 @@
 
         const tbody = document.getElementById('logsTableBody');
         if (!data.records || data.records.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配日志记录</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配日志记录</td></tr>';
           return;
         }
 
-        tbody.innerHTML = data.records.map((r, idx) => `
-          <tr>
-            <td>${new Date(r.requested_at).toLocaleTimeString()}</td>
-            <td>
-              ${r.failed
-                ? `<span class="badge badge-danger">失败 ${esc(r.failure_status_code) || ''}</span>`
-                : '<span class="badge badge-success">成功 200</span>'}
-            </td>
-            <td class="font-mono"><strong>${esc(r.model)}</strong></td>
-            <td><span class="badge badge-neutral">${esc(r.provider)}</span></td>
-            <td class="font-mono" style="color:var(--text-secondary);">${esc(r.auth_id) || '—'}</td>
-            <td class="font-mono">${r.api_key ? esc(r.api_key.substring(0, 16)) + '...' : '—'}</td>
-            <td class="num font-mono">${formatNumber(r.total_tokens)}</td>
-            <td class="num font-mono text-emerald">${formatCost(r.total_cost)}</td>
-            <td class="num font-mono">${r.latency_ms} ms</td>
-            <td style="text-align: center;">
-              <button class="action-btn" style="padding: 2px 7px; font-size: 11.5px;" onclick="showDetail(${idx})">详情</button>
-            </td>
-          </tr>
-        `).join('');
+        tbody.innerHTML = data.records.map((r, idx) => {
+          let responseModelCell = '<span style="color:var(--text-tertiary);">—</span>';
+          if (r.model_mismatch) {
+            responseModelCell = `
+              <div class="font-mono" style="color: var(--warning-color); font-weight: 600;">${esc(r.response_model)}</div>
+              <div style="margin-top: 2px;"><span class="badge badge-warning">${t('detail_mismatch')}</span></div>
+            `;
+          } else if (r.response_model) {
+            responseModelCell = `<span class="font-mono" style="color:var(--text-secondary); font-size:12px;">${esc(r.response_model)}</span>`;
+          }
+
+          let modelCell = `
+            <div class="font-mono"><strong>${esc(r.model)}</strong></div>
+            ${r.alias && r.alias !== r.model ? `<div style="font-size:10.5px; color:var(--text-tertiary);">(别名: ${esc(r.alias)})</div>` : ''}
+          `;
+
+          return `
+            <tr>
+              <td>${new Date(r.requested_at).toLocaleTimeString()}</td>
+              <td>
+                ${r.failed
+                  ? `<span class="badge badge-danger">失败 ${esc(r.failure_status_code) || ''}</span>`
+                  : '<span class="badge badge-success">成功 200</span>'}
+              </td>
+              <td>${modelCell}</td>
+              <td>${responseModelCell}</td>
+              <td><span class="badge badge-neutral">${esc(r.provider)}</span></td>
+              <td class="font-mono" style="color:var(--text-secondary);">${esc(r.auth_id) || '—'}</td>
+              <td class="font-mono">${r.api_key ? esc(r.api_key.substring(0, 16)) + '...' : '—'}</td>
+              <td class="num font-mono">${formatNumber(r.total_tokens)}</td>
+              <td class="num font-mono text-emerald">${formatCost(r.total_cost)}</td>
+              <td class="num font-mono">${r.latency_ms} ms</td>
+              <td style="text-align: center;">
+                <button class="table-btn" onclick="showDetail(${idx})">${t('col_detail')}</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
       } catch (err) {
         console.error('load logs failed:', err);
       }
     }
 
-    window.showDetail = function(idx) {
-      const r = state.logsData[idx];
+    function renderDetailModal(r) {
       if (!r) return;
 
       document.getElementById('modalTitle').textContent = `请求明细 #${r.id} · ${r.model}`;
+
+      let modelIntegrityBanner = '';
+      if (r.model_mismatch) {
+        modelIntegrityBanner = `
+          <div style="background: rgba(224, 170, 20, 0.1); border: 1px solid rgba(224, 170, 20, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <strong style="font-size: 12px; color: var(--warning-color);">${t('detail_integrity_title')}</strong>
+              <span class="badge badge-warning" style="font-weight: bold;">${t('detail_integrity_mismatch_badge')}</span>
+            </div>
+            <div style="font-size: 12px; color: var(--text-secondary); line-height: 1.5;">
+              客户端请求目标为 <code>${esc(r.alias || r.model)}</code>，CPA 路由目标为 <code>${esc(r.model)}</code>，但上游实际返回模型为 <strong style="color: var(--warning-color); font-family: var(--font-mono);">${esc(r.response_model)}</strong>。
+            </div>
+          </div>
+        `;
+      } else if (r.response_model) {
+        modelIntegrityBanner = `
+          <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 12px; color: var(--success-color);"><strong>${t('detail_integrity_pass_title')}</strong>: <code>${esc(r.response_model)}</code></span>
+            <span class="badge badge-success">${t('detail_integrity_pass_badge')}</span>
+          </div>
+        `;
+      }
+
+      const bannerEl = document.getElementById('modalIntegrityBanner');
+      if (bannerEl) {
+        bannerEl.innerHTML = modelIntegrityBanner;
+        bannerEl.style.display = modelIntegrityBanner ? 'block' : 'none';
+      }
+
       const grid = document.getElementById('modalGrid');
       grid.innerHTML = `
-        <div class="grid-cell"><div class="cell-label">模型</div><div class="cell-value font-mono">${esc(r.model)}</div></div>
+        <div class="grid-cell"><div class="cell-label">请求/路由模型</div><div class="cell-value font-mono">${esc(r.model)} ${r.alias ? `<span style="font-size:11px;color:var(--text-tertiary);">(别名: ${esc(r.alias)})</span>` : ''}</div></div>
+        <div class="grid-cell"><div class="cell-label">上游实际响应模型</div><div class="cell-value font-mono">${esc(r.response_model) || '<em style="color:var(--text-tertiary)">未提供</em>'}</div></div>
         <div class="grid-cell"><div class="cell-label">AI 提供商</div><div class="cell-value">${esc(r.provider)} (${esc(r.auth_type) || 'default'})</div></div>
         <div class="grid-cell"><div class="cell-label">认证文件 / ID</div><div class="cell-value font-mono">${esc(r.auth_id) || '—'}</div></div>
         <div class="grid-cell"><div class="cell-label">客户端 Key</div><div class="cell-value font-mono">${esc(r.api_key) || '—'}</div></div>
@@ -2022,6 +3116,32 @@
         <div class="grid-cell"><div class="cell-label">预估费用</div><div class="cell-value font-mono text-emerald"><strong>${formatCost(r.total_cost)}</strong></div></div>
       `;
 
+      const telemSec = document.getElementById('modalTelemetrySection');
+      const telemGrid = document.getElementById('modalTelemetryGrid');
+      const hasTelemetry = r.header_trace_id || r.plan_type || (r.header_quota_used_percent !== null && r.header_quota_used_percent !== undefined) || r.header_quota_recover_at_ms > 0 || r.header_error_kind || r.header_error_code || r.fail_summary;
+
+      if (hasTelemetry) {
+        telemSec.style.display = 'block';
+        let quotaText = '—';
+        if (r.header_quota_used_percent !== null && r.header_quota_used_percent !== undefined) {
+          quotaText = `已用 ${r.header_quota_used_percent.toFixed(1)}%`;
+        }
+        let recoverText = '—';
+        if (r.header_quota_recover_at_ms > 0) {
+          recoverText = new Date(r.header_quota_recover_at_ms).toLocaleString();
+        }
+        telemGrid.innerHTML = `
+          <div class="grid-cell"><div class="cell-label">上游 Trace ID</div><div class="cell-value font-mono" style="word-break:break-all;">${esc(r.header_trace_id) || '—'}</div></div>
+          <div class="grid-cell"><div class="cell-label">订阅版本</div><div class="cell-value font-mono">${esc(r.plan_type) || '—'}</div></div>
+          <div class="grid-cell"><div class="cell-label">Codex 5H 配额使用率</div><div class="cell-value font-mono">${quotaText}</div></div>
+          <div class="grid-cell"><div class="cell-label">限流重置恢复时间</div><div class="cell-value font-mono">${recoverText}</div></div>
+          <div class="grid-cell"><div class="cell-label">错误类型 / 错误代码</div><div class="cell-value font-mono" style="color:var(--error-color);">${esc(r.header_error_kind) || '—'} / ${esc(r.header_error_code) || '—'}</div></div>
+          <div class="grid-cell"><div class="cell-label">失败原因摘要</div><div class="cell-value" style="color:var(--error-color);">${esc(r.fail_summary) || '—'}</div></div>
+        `;
+      } else {
+        telemSec.style.display = 'none';
+      }
+
       const errSec = document.getElementById('modalErrorSection');
       if (r.failed) {
         errSec.style.display = 'block';
@@ -2032,7 +3152,27 @@
       }
 
       document.getElementById('detailModal').classList.add('active');
+    }
+
+    window.showDetail = function(idx) {
+      renderDetailModal(state.logsData[idx]);
     };
+
+    window.showDetailFromMismatch = function(idx) {
+      renderDetailModal(state.integrityRecords[idx]);
+    };
+
+    const btnCopyErrorBody = document.getElementById('btnCopyErrorBody');
+    if (btnCopyErrorBody) {
+      btnCopyErrorBody.onclick = () => {
+        const text = document.getElementById('modalErrorBody').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          alert('上游错误响应已复制到剪贴板！');
+        }).catch(() => {
+          alert('复制失败，请手动选中复制');
+        });
+      };
+    }
 
     document.getElementById('modalClose').addEventListener('click', () => {
       document.getElementById('detailModal').classList.remove('active');
@@ -2621,6 +3761,8 @@
         }).catch(() => {});
       } else if (state.activeTab === 'tab-models') {
         loadModels();
+      } else if (state.activeTab === 'tab-integrity') {
+        loadIntegrityData();
       } else if (state.activeTab === 'tab-providers') {
         loadProviders();
       } else if (state.activeTab === 'tab-auths') {
@@ -2688,6 +3830,568 @@
         URL.revokeObjectURL(objectUrl);
       } catch (err) {
         if (err.name !== 'AuthRequired') alert('导出失败: ' + err.message);
+      }
+    });
+
+    // ---- Pricing Center Modal Logic ----
+    const pricesModal = document.getElementById('pricesModal');
+    const syncPricesPanel = document.getElementById('syncPricesPanel');
+    const addPriceFormPanel = document.getElementById('addPriceFormPanel');
+
+    document.getElementById('btnOpenPricesModal').addEventListener('click', () => {
+      pricesModal.classList.add('active');
+      loadPrices();
+    });
+    document.getElementById('closePricesModal').addEventListener('click', () => {
+      pricesModal.classList.remove('active');
+    });
+    document.getElementById('btnClosePricesBottom').addEventListener('click', () => {
+      pricesModal.classList.remove('active');
+    });
+
+    document.getElementById('btnOpenSyncPrices').addEventListener('click', () => {
+      syncPricesPanel.style.display = syncPricesPanel.style.display === 'none' ? 'block' : 'none';
+      addPriceFormPanel.style.display = 'none';
+    });
+
+    document.getElementById('btnToggleAddPrice').addEventListener('click', () => {
+      addPriceFormPanel.style.display = addPriceFormPanel.style.display === 'none' ? 'block' : 'none';
+      syncPricesPanel.style.display = 'none';
+      document.getElementById('priceFormTitle').textContent = '添加或覆盖模型价格 ($ / 1M Tokens)';
+      document.getElementById('customPriceModel').value = '';
+      document.getElementById('customPriceInput').value = '';
+      document.getElementById('customPriceOutput').value = '';
+      document.getElementById('customPriceCacheRead').value = '';
+      document.getElementById('customPriceCacheWrite').value = '';
+      document.getElementById('customPriceModel').focus();
+    });
+
+    document.getElementById('btnCancelCustomPrice').addEventListener('click', () => {
+      addPriceFormPanel.style.display = 'none';
+    });
+
+    document.getElementById('btnExecuteSync').addEventListener('click', async () => {
+      const source = state.syncSource || 'litellm';
+      const customUrl = (document.getElementById('syncCustomUrlInput').value || '').trim();
+      const statusMsg = document.getElementById('syncStatusMsg');
+      statusMsg.textContent = '正在同步中，请稍候...';
+      statusMsg.style.color = 'var(--text-secondary)';
+
+      try {
+        let url = API_BASE + '/prices/sync?source=' + encodeURIComponent(source);
+        if (source === 'custom') {
+          if (!customUrl) {
+            alert('请输入自定义 JSON URL！');
+            statusMsg.textContent = '';
+            return;
+          }
+          url += '&custom_url=' + encodeURIComponent(customUrl);
+        }
+
+        const res = await fetchJSON(url);
+
+        const count = res.synced_models || (res.result && res.result.imported_count) || (res.result && res.result.total_catalog) || 0;
+        statusMsg.textContent = `同步成功！共更新 ${count} 个模型价格`;
+        statusMsg.style.color = 'var(--success-color)';
+        loadPrices();
+      } catch (err) {
+        if (err.name !== 'AuthRequired') {
+          statusMsg.textContent = '同步失败: ' + err.message;
+          statusMsg.style.color = 'var(--error-color)';
+        }
+      }
+    });
+
+    document.getElementById('btnSaveCustomPrice').addEventListener('click', async () => {
+      const model = (document.getElementById('customPriceModel').value || '').trim();
+      if (!model) {
+        alert('请输入模型名称！');
+        return;
+      }
+      const inP = parseFloat(document.getElementById('customPriceInput').value) || 0;
+      const outP = parseFloat(document.getElementById('customPriceOutput').value) || 0;
+      const crP = parseFloat(document.getElementById('customPriceCacheRead').value) || 0;
+      const cwP = parseFloat(document.getElementById('customPriceCacheWrite').value) || 0;
+
+      try {
+        const url = API_BASE + '/prices/override?model=' + encodeURIComponent(model) +
+          '&input_price=' + encodeURIComponent(inP) +
+          '&output_price=' + encodeURIComponent(outP) +
+          '&cache_read_price=' + encodeURIComponent(crP) +
+          '&cache_creation_price=' + encodeURIComponent(cwP);
+
+        await fetchJSON(url);
+        alert(`模型 ${model} 的价格覆盖保存成功！`);
+        addPriceFormPanel.style.display = 'none';
+        loadPrices();
+      } catch (err) {
+        if (err.name !== 'AuthRequired') alert('保存价格覆盖失败: ' + err.message);
+      }
+    });
+
+    window.editPriceOverride = function(model, inP, outP, crP, cwP) {
+      addPriceFormPanel.style.display = 'block';
+      syncPricesPanel.style.display = 'none';
+      document.getElementById('priceFormTitle').textContent = `编辑模型价格覆盖: ${model}`;
+      document.getElementById('customPriceModel').value = model;
+      document.getElementById('customPriceInput').value = inP;
+      document.getElementById('customPriceOutput').value = outP;
+      document.getElementById('customPriceCacheRead').value = crP;
+      document.getElementById('customPriceCacheWrite').value = cwP;
+      document.getElementById('customPriceModel').focus();
+    };
+
+    window.deletePriceOverride = async function(model) {
+      if (!confirm(`确定删除对模型 ${model} 的自定义价格覆盖并恢复默认吗？`)) return;
+      try {
+        await fetchJSON(API_BASE + '/prices/override?action=delete&model=' + encodeURIComponent(model));
+        alert(`已删除 ${model} 的价格覆盖！`);
+        loadPrices();
+      } catch (err) {
+        if (err.name !== 'AuthRequired') alert('删除价格覆盖失败: ' + err.message);
+      }
+    };
+
+    async function loadPrices() {
+      try {
+        const data = await fetchJSON(API_BASE + '/prices');
+        state.pricesData = (data && data.prices) || [];
+        renderPricesTable();
+      } catch (err) {
+        console.error('load prices failed:', err);
+      }
+    }
+
+    function renderPricesTable() {
+      const tbody = document.getElementById('pricesTableBody');
+      const badgeCount = document.getElementById('pricesCountBadge');
+      if (!tbody) return;
+
+      const q = (document.getElementById('priceSearchInput').value || '').trim().toLowerCase();
+      const srcFilter = state.priceSourceFilter || '';
+
+      let list = state.pricesData || [];
+      if (q) {
+        list = list.filter(p => (p.model || '').toLowerCase().includes(q));
+      }
+      if (srcFilter) {
+        list = list.filter(p => p.source === srcFilter);
+      }
+
+      if (badgeCount) badgeCount.textContent = `${list.length} / ${state.pricesData.length} 模型`;
+
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--text-tertiary); padding: 32px;">暂无匹配价格记录</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = list.map(p => {
+        let srcBadge = '<span class="badge badge-neutral">内置默认</span>';
+        if (p.source === 'custom') {
+          srcBadge = '<span class="badge badge-warning">自定义覆盖</span>';
+        } else if (p.source === 'synced') {
+          srcBadge = `<span class="badge badge-success">在线同步 (${esc(p.synced_from || 'litellm')})</span>`;
+        }
+
+        const isCustom = p.source === 'custom';
+        const actionsHtml = isCustom ? `
+          <button class="table-btn" onclick="editPriceOverride(${jsArg(p.model)}, ${p.input_price}, ${p.output_price}, ${p.cache_read_price}, ${p.cache_creation_price})">编辑</button>
+          <button class="table-btn table-btn-danger" onclick="deletePriceOverride(${jsArg(p.model)})">重置</button>
+        ` : `
+          <button class="table-btn" onclick="editPriceOverride(${jsArg(p.model)}, ${p.input_price}, ${p.output_price}, ${p.cache_read_price}, ${p.cache_creation_price})">自定义覆盖</button>
+        `;
+
+        return `
+          <tr>
+            <td class="font-mono"><strong>${esc(p.model)}</strong></td>
+            <td>${srcBadge}</td>
+            <td class="num font-mono">$${p.input_price.toFixed(4)}</td>
+            <td class="num font-mono">$${p.output_price.toFixed(4)}</td>
+            <td class="num font-mono">$${p.cache_read_price ? p.cache_read_price.toFixed(4) : '0.0000'}</td>
+            <td class="num font-mono">$${p.cache_creation_price ? p.cache_creation_price.toFixed(4) : '0.0000'}</td>
+            <td style="font-size: 11.5px; color: var(--text-tertiary);">${p.updated_at ? new Date(p.updated_at).toLocaleString() : '—'}</td>
+            <td style="text-align: center;">
+              <div style="display: flex; gap: 4px; justify-content: center;">${actionsHtml}</div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    document.getElementById('priceSearchInput').addEventListener('input', renderPricesTable);
+
+    // ---- Diagnostics Modal Logic ----
+    const diagnosticsModal = document.getElementById('diagnosticsModal');
+    document.getElementById('btnOpenDiagnosticsModal').addEventListener('click', () => {
+      diagnosticsModal.classList.add('active');
+      loadDiagnostics();
+    });
+    document.getElementById('closeDiagnosticsModal').addEventListener('click', () => {
+      diagnosticsModal.classList.remove('active');
+    });
+    document.getElementById('btnCloseDiagnosticsBottom').addEventListener('click', () => {
+      diagnosticsModal.classList.remove('active');
+    });
+
+    async function loadDiagnostics() {
+      try {
+        const p = getFilterParams();
+        p.set('recent_limit', '50');
+        const data = await fetchJSON(API_BASE + '/diagnostics?' + p.toString());
+        state.diagnosticsData = data;
+        renderDiagnostics(data);
+      } catch (err) {
+        console.error('load diagnostics failed:', err);
+      }
+    }
+
+    function renderDiagnostics(data) {
+      if (!data) return;
+
+      document.getElementById('diagTotalRequests').textContent = (data.total_requests || 0).toLocaleString();
+      document.getElementById('diagFailedRequests').textContent = (data.failed_requests || 0).toLocaleString();
+      const failRatePct = ((data.failure_rate || 0) * 100).toFixed(1) + '%';
+      document.getElementById('diagFailureRate').textContent = failRatePct;
+      document.getElementById('diagAvgLatency').textContent = `${(data.avg_latency_ms || 0).toFixed(0)} ms`;
+      const diagMismatchesEl = document.getElementById('diagModelMismatches');
+      if (diagMismatchesEl) diagMismatchesEl.textContent = (data.model_mismatches || 0).toLocaleString();
+
+      const scListEl = document.getElementById('diagStatusCodesList');
+      const scCodes = Object.keys(data.error_status_codes || {});
+      if (scCodes.length === 0) {
+        scListEl.innerHTML = '<span style="font-size: 12px; color: var(--text-tertiary);">无错误状态码记录 (全部正常)</span>';
+      } else {
+        scListEl.innerHTML = scCodes.map(code => {
+          const cnt = data.error_status_codes[code];
+          return `<div class="badge badge-danger" style="padding: 4px 8px; font-size: 12px;">HTTP ${esc(code)}: <strong>${cnt}</strong></div>`;
+        }).join('');
+      }
+
+      const ekListEl = document.getElementById('diagErrorKindsList');
+      const ekKinds = Object.keys(data.error_kinds || {});
+      if (ekKinds.length === 0) {
+        ekListEl.innerHTML = '<span style="font-size: 12px; color: var(--text-tertiary);">暂无分类异常</span>';
+      } else {
+        ekListEl.innerHTML = ekKinds.map(k => {
+          const cnt = data.error_kinds[k];
+          return `<div class="badge badge-warning" style="padding: 4px 8px; font-size: 12px;">${esc(k)}: <strong>${cnt}</strong></div>`;
+        }).join('');
+      }
+
+      const tbody = document.getElementById('diagFailuresTableBody');
+      const failures = data.recent_failures || [];
+      if (failures.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: var(--text-tertiary); padding: 24px;">当前筛选范围内无失败记录</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = failures.map((f, idx) => `
+        <tr>
+          <td style="font-size: 11.5px;">${new Date(f.requested_at).toLocaleTimeString()}</td>
+          <td><span class="badge badge-danger">${f.failure_status_code ? 'HTTP ' + f.failure_status_code : 'FAILED'}</span></td>
+          <td class="font-mono"><strong>${esc(f.model)}</strong></td>
+          <td class="font-mono" style="color:var(--text-secondary);">${esc(f.auth_id) || '—'}</td>
+          <td><span class="badge badge-neutral">${esc(f.header_error_kind || 'error')}</span></td>
+          <td style="max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${esc(f.fail_summary || '')}">
+            ${esc(f.fail_summary || '—')}
+          </td>
+          <td style="text-align: center;">
+            <button class="table-btn" onclick="inspectFailure(${idx})">${t('col_detail')}</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    window.filterMismatchFromDiag = function() {
+      const diagModal = document.getElementById('diagnosticsModal');
+      if (diagModal) diagModal.classList.remove('active');
+      switchToTab('tab-integrity');
+    };
+
+    async function loadIntegrityData() {
+      try {
+        const p = getFilterParams();
+        p.set('recent_limit', '50');
+        const [diagData, summaryData, mismatchLogs] = await Promise.all([
+          fetchJSON(API_BASE + '/diagnostics?' + p.toString()).catch(() => null),
+          fetchJSON(API_BASE + '/summary?' + p.toString()).catch(() => null),
+          fetchJSON(API_BASE + '/records?page=' + (state.integrityPage || 1) + '&page_size=20&mismatch=true&' + p.toString()).catch(() => null)
+        ]);
+
+        const totalReq = (summaryData && summaryData.total_requests) || (diagData && diagData.total_requests) || 0;
+        const mismatches = (diagData && diagData.model_mismatches) || 0;
+        const matchRate = totalReq > 0 ? (((totalReq - mismatches) / totalReq) * 100).toFixed(1) + '%' : '100.0%';
+
+        document.getElementById('integrity-total-requests').textContent = totalReq.toLocaleString();
+        document.getElementById('integrity-match-rate').textContent = matchRate;
+        document.getElementById('integrity-mismatch-count').textContent = mismatches.toLocaleString();
+
+        document.getElementById('integrity-response-coverage').textContent = totalReq > 0
+          ? (Math.min(100, Math.max(0, ((totalReq - (diagData?.failed_requests || 0)) / totalReq) * 100))).toFixed(1) + '%'
+          : '—';
+
+        // Render Substitution Patterns
+        const patternsContainer = document.getElementById('integrityPatternsContainer');
+        const pairs = (diagData && diagData.by_mismatch_pair) || [];
+        if (pairs.length === 0) {
+          patternsContainer.innerHTML = `
+            <div style="text-align: center; color: var(--text-tertiary); padding: 24px 0; font-size: 12.5px;">
+              当前未检测到任何模型不一致或降级记录。所有渠道实际返回模型均与预期路由目标吻合。
+            </div>
+          `;
+        } else {
+          patternsContainer.innerHTML = `
+            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+              ${pairs.map(pair => `
+                <div class="badge badge-warning" style="padding: 6px 12px; font-size: 12px; font-family: var(--font-mono); border: 1px solid rgba(245, 158, 11, 0.4); background: rgba(245, 158, 11, 0.1);">
+                  <strong>${esc(pair.key)}</strong>: <span>${pair.count.toLocaleString()} 次异常</span>
+                </div>
+              `).join('')}
+            </div>
+          `;
+        }
+
+        // Render Mismatch Stream Table
+        const tbody = document.getElementById('integrityTableBody');
+        const records = (mismatchLogs && mismatchLogs.records) || [];
+        const totalMismatch = (mismatchLogs && mismatchLogs.total) || 0;
+        state.integrityTotal = totalMismatch;
+        state.integrityRecords = records;
+
+        document.getElementById('integrityLogsPaginationInfo').textContent =
+          `第 ${mismatchLogs?.page || 1} 页，共 ${totalMismatch} 条不一致`;
+
+        if (records.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="10" style="text-align: center; color: var(--text-tertiary); padding: 36px;">当前范围内暂无模型不一致记录</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = records.map((r, idx) => `
+          <tr>
+            <td>${new Date(r.requested_at).toLocaleTimeString()}</td>
+            <td>
+              ${r.failed
+                ? `<span class="badge badge-danger">失败 ${esc(r.failure_status_code) || ''}</span>`
+                : '<span class="badge badge-success">成功 200</span>'}
+            </td>
+            <td class="font-mono"><strong>${esc(r.model)}</strong> ${r.alias && r.alias !== r.model ? `<span style="font-size:10px; color:var(--text-tertiary);">(别名: ${esc(r.alias)})</span>` : ''}</td>
+            <td class="font-mono"><strong style="color: var(--warning-color);">${esc(r.response_model)}</strong></td>
+            <td><span class="badge badge-warning">${t('detail_mismatch')}</span></td>
+            <td><span class="badge badge-neutral">${esc(r.provider)}</span></td>
+            <td class="font-mono" style="color:var(--text-secondary);">${esc(r.auth_id) || '—'}</td>
+            <td class="font-mono">${r.api_key ? esc(r.api_key.substring(0, 16)) + '...' : '—'}</td>
+            <td class="num font-mono">${r.latency_ms} ms</td>
+            <td style="text-align: center;">
+              <button class="table-btn" onclick="showDetailFromMismatch(${idx})">${t('col_detail')}</button>
+            </td>
+          </tr>
+        `).join('');
+      } catch (err) {
+        console.error('load integrity data failed:', err);
+      }
+    }
+
+    document.getElementById('btnIntegrityPrevPage')?.addEventListener('click', () => {
+      if ((state.integrityPage || 1) > 1) {
+        state.integrityPage = (state.integrityPage || 1) - 1;
+        loadIntegrityData();
+      }
+    });
+    document.getElementById('btnIntegrityNextPage')?.addEventListener('click', () => {
+      if ((state.integrityPage || 1) * 20 < (state.integrityTotal || 0)) {
+        state.integrityPage = (state.integrityPage || 1) + 1;
+        loadIntegrityData();
+      }
+    });
+
+    window.inspectFailure = function(idx) {
+      if (!state.diagnosticsData || !state.diagnosticsData.recent_failures) return;
+      const f = state.diagnosticsData.recent_failures[idx];
+      if (!f) return;
+
+      document.getElementById('modalTitle').textContent = `失败调用明细 #${f.id} · ${f.model}`;
+      const grid = document.getElementById('modalGrid');
+      grid.innerHTML = `
+        <div class="grid-cell"><div class="cell-label">模型</div><div class="cell-value font-mono">${esc(f.model)}</div></div>
+        <div class="grid-cell"><div class="cell-label">AI 提供商</div><div class="cell-value">${esc(f.provider)}</div></div>
+        <div class="grid-cell"><div class="cell-label">认证账号 / ID</div><div class="cell-value font-mono">${esc(f.auth_id) || '—'}</div></div>
+        <div class="grid-cell"><div class="cell-label">发生时间</div><div class="cell-value">${new Date(f.requested_at).toLocaleString()}</div></div>
+        <div class="grid-cell"><div class="cell-label">HTTP 状态码</div><div class="cell-value font-mono" style="color:var(--error-color);">HTTP ${f.failure_status_code}</div></div>
+        <div class="grid-cell"><div class="cell-label">错误类型 / 错误代码</div><div class="cell-value font-mono">${esc(f.header_error_kind) || '—'} / ${esc(f.header_error_code) || '—'}</div></div>
+        <div class="grid-cell"><div class="cell-label">上游 Trace ID</div><div class="cell-value font-mono" style="word-break:break-all;">${esc(f.header_trace_id) || '—'}</div></div>
+        <div class="grid-cell"><div class="cell-label">错误摘要</div><div class="cell-value" style="color:var(--error-color);">${esc(f.fail_summary) || '—'}</div></div>
+      `;
+
+      const telemSec = document.getElementById('modalTelemetrySection');
+      if (telemSec) telemSec.style.display = 'none';
+
+      const errSec = document.getElementById('modalErrorSection');
+      errSec.style.display = 'block';
+      document.getElementById('modalErrorBody').textContent =
+        `HTTP ${f.failure_status_code}\n${f.failure_body || f.fail_summary || '无原始响应数据'}`;
+
+      document.getElementById('detailModal').classList.add('active');
+    };
+
+    // ---- Data Hub (Import & Export) Modal Logic ----
+    const dataHubModal = document.getElementById('dataHubModal');
+    const exportPanel = document.getElementById('dataHubExportPanel');
+    const importPanel = document.getElementById('dataHubImportPanel');
+    const btnHubExport = document.getElementById('btnHubTabExport');
+    const btnHubImport = document.getElementById('btnHubTabImport');
+
+    document.getElementById('btnOpenDataHubModal').addEventListener('click', () => {
+      dataHubModal.classList.add('active');
+    });
+    document.getElementById('closeDataHubModal').addEventListener('click', () => {
+      dataHubModal.classList.remove('active');
+    });
+    document.getElementById('btnCloseDataHubBottom').addEventListener('click', () => {
+      dataHubModal.classList.remove('active');
+    });
+
+    btnHubExport.addEventListener('click', () => {
+      btnHubExport.classList.add('active');
+      btnHubImport.classList.remove('active');
+      exportPanel.style.display = 'flex';
+      importPanel.style.display = 'none';
+    });
+
+    btnHubImport.addEventListener('click', () => {
+      btnHubImport.classList.add('active');
+      btnHubExport.classList.remove('active');
+      importPanel.style.display = 'flex';
+      exportPanel.style.display = 'none';
+    });
+
+    document.querySelectorAll('#exportFormatControl .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#exportFormatControl .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.exportFormat = btn.getAttribute('data-val');
+      });
+    });
+
+    document.querySelectorAll('#exportScopeControl .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#exportScopeControl .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.exportScope = btn.getAttribute('data-val');
+      });
+    });
+
+    document.getElementById('btnExecuteExport').addEventListener('click', async () => {
+      const format = state.exportFormat || 'csv';
+      const scope = state.exportScope || 'filtered';
+      const limit = state.exportLimit || '50000';
+
+      try {
+        let p = new URLSearchParams();
+        if (scope === 'filtered') {
+          p = getFilterParams();
+        }
+        p.set('format', format);
+        p.set('limit', limit);
+
+        const url = API_BASE + '/export?' + p.toString();
+        const headers = NEEDS_KEY && auth.key ? { 'X-Management-Key': auth.key } : {};
+        const res = await fetch(url, { headers: headers });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + (await res.text()));
+
+        const blob = await res.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', objectUrl);
+        link.setAttribute('download', `cpa_usage_export_${new Date().toISOString().slice(0,10)}.${format}`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        if (err.name !== 'AuthRequired') alert('导出失败: ' + err.message);
+      }
+    });
+
+    const importDropZone = document.getElementById('importDropZone');
+    const importFileInput = document.getElementById('importFileInput');
+    const selectedFileInfo = document.getElementById('selectedFileInfo');
+    const selectedFileName = document.getElementById('selectedFileName');
+    const btnClearFile = document.getElementById('btnClearSelectedFile');
+    const btnExecuteImport = document.getElementById('btnExecuteImport');
+    const importResultBox = document.getElementById('importResultBox');
+
+    let currentImportFile = null;
+
+    importDropZone.addEventListener('click', () => importFileInput.click());
+    importDropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      importDropZone.classList.add('dragover');
+    });
+    importDropZone.addEventListener('dragleave', () => importDropZone.classList.remove('dragover'));
+    importDropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      importDropZone.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        setImportFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    importFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        setImportFile(e.target.files[0]);
+      }
+    });
+
+    function setImportFile(file) {
+      currentImportFile = file;
+      selectedFileName.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      selectedFileInfo.style.display = 'flex';
+      btnExecuteImport.disabled = false;
+      importResultBox.style.display = 'none';
+    }
+
+    btnClearFile.addEventListener('click', () => {
+      currentImportFile = null;
+      importFileInput.value = '';
+      selectedFileInfo.style.display = 'none';
+      btnExecuteImport.disabled = true;
+      importResultBox.style.display = 'none';
+    });
+
+    btnExecuteImport.addEventListener('click', async () => {
+      if (!currentImportFile) return;
+      btnExecuteImport.disabled = true;
+      btnExecuteImport.textContent = '正在解析并导入数据中...';
+      importResultBox.style.display = 'none';
+
+      try {
+        const text = await currentImportFile.text();
+        const res = await fetchJSON(API_BASE + '/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: text
+        });
+
+        importResultBox.style.display = 'block';
+        importResultBox.style.background = 'rgba(16, 185, 129, 0.12)';
+        importResultBox.style.color = 'var(--success-color)';
+        importResultBox.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+        importResultBox.innerHTML = `
+          <strong>数据导入成功</strong><br>
+          识别格式: <code>${esc(res.format || 'json')}</code><br>
+          成功合入新记录: <strong>${res.imported}</strong> 条<br>
+          自动去重跳过记录: <strong>${res.skipped}</strong> 条
+        `;
+        loadActiveTabData();
+      } catch (err) {
+        importResultBox.style.display = 'block';
+        importResultBox.style.background = 'rgba(198, 87, 70, 0.12)';
+        importResultBox.style.color = 'var(--error-color)';
+        importResultBox.style.border = '1px solid rgba(198, 87, 70, 0.3)';
+        importResultBox.innerHTML = `<strong>导入失败:</strong> ${esc(err.message)}`;
+      } finally {
+        btnExecuteImport.disabled = false;
+        btnExecuteImport.textContent = '开始导入并去重合入';
       }
     });
 
@@ -2835,6 +4539,7 @@
     }
 
     async function bootstrap() {
+      applyI18N();
       initDropdowns();
       state.timer = setInterval(loadActiveTabData, 15000);
 

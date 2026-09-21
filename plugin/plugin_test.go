@@ -183,14 +183,22 @@ func TestResourceRoutesExcludeAPIByDefault(t *testing.T) {
 		t.Fatalf("resource routes = %v, want only /dashboard", paths)
 	}
 
-	// The management routes still carry the full API.
-	if len(resp.Routes) != len(apiEndpoints) {
-		t.Fatalf("management routes = %d, want %d", len(resp.Routes), len(apiEndpoints))
+	// The management routes carry the full API routes (including methods for each endpoint).
+	if len(resp.Routes) < len(apiEndpoints) {
+		t.Fatalf("management routes = %d, want at least %d", len(resp.Routes), len(apiEndpoints))
 	}
+	foundRoutes := make(map[string]bool)
 	for _, r := range resp.Routes {
-		if r.Path == "/usage/cleanup" && r.Method != http.MethodPost {
-			t.Errorf("cleanup management route method = %s, want POST", r.Method)
-		}
+		foundRoutes[r.Method+" "+r.Path] = true
+	}
+	if !foundRoutes["POST /usage/cleanup"] {
+		t.Errorf("missing POST /usage/cleanup management route")
+	}
+	if !foundRoutes["GET /usage/accounts/health"] {
+		t.Errorf("missing GET /usage/accounts/health management route")
+	}
+	if !foundRoutes["GET /usage/prices"] {
+		t.Errorf("missing GET /usage/prices management route")
 	}
 }
 

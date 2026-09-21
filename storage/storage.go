@@ -27,6 +27,44 @@ const (
 	flushInterval    = 250 * time.Millisecond
 )
 
+// Pagination and export bounds. These are exported so HTTP handlers can apply
+// and report the exact same limits the storage layer enforces, instead of
+// echoing back a page size that was silently clamped here.
+const (
+	// DefaultPageSize is used when a caller does not request a page size.
+	DefaultPageSize = 20
+	// MaxPageSize is the largest page the record query will ever return.
+	MaxPageSize = 100
+	// DefaultExportLimit is used when a caller does not request an export limit.
+	DefaultExportLimit = 50000
+	// MaxExportLimit bounds a single export so one request cannot pull an
+	// unbounded number of rows into memory.
+	MaxExportLimit = 200000
+)
+
+// ClampPageSize normalizes a requested page size into the supported range.
+func ClampPageSize(pageSize int) int {
+	if pageSize < 1 {
+		return DefaultPageSize
+	}
+	if pageSize > MaxPageSize {
+		return MaxPageSize
+	}
+	return pageSize
+}
+
+// ClampExportLimit normalizes a requested export row limit into the supported
+// range.
+func ClampExportLimit(limit int) int {
+	if limit < 1 {
+		return DefaultExportLimit
+	}
+	if limit > MaxExportLimit {
+		return MaxExportLimit
+	}
+	return limit
+}
+
 // Open initializes or connects to the SQLite database at dbPath.
 func Open(dbPath string) (*Storage, error) {
 	// Enable WAL mode, busy timeout and normal synchronous mode via DSN
@@ -84,6 +122,17 @@ func (s *Storage) initSchema() error {
 		failed INTEGER DEFAULT 0,
 		failure_status_code INTEGER DEFAULT 0,
 		failure_body TEXT DEFAULT '',
+		fail_summary TEXT DEFAULT '',
+		header_error_kind TEXT DEFAULT '',
+		header_error_code TEXT DEFAULT '',
+		header_trace_id TEXT DEFAULT '',
+		header_quota_recover_at_ms INTEGER DEFAULT 0,
+		header_quota_used_percent REAL DEFAULT NULL,
+		header_secondary_quota_recover_at_ms INTEGER DEFAULT 0,
+		header_secondary_quota_used_percent REAL DEFAULT NULL,
+		plan_type TEXT DEFAULT '',
+		response_model TEXT DEFAULT '',
+		model_mismatch INTEGER DEFAULT 0,
 		input_tokens INTEGER DEFAULT 0,
 		output_tokens INTEGER DEFAULT 0,
 		reasoning_tokens INTEGER DEFAULT 0,
@@ -105,9 +154,81 @@ func (s *Storage) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_usage_auth_id ON usage_records(auth_id);
 	CREATE INDEX IF NOT EXISTS idx_usage_provider ON usage_records(provider);
 	CREATE INDEX IF NOT EXISTS idx_usage_failed ON usage_records(failed);
+
+	CREATE TABLE IF NOT EXISTS custom_prices (
+		model TEXT PRIMARY KEY,
+		input_cost_per_token REAL DEFAULT 0,
+		output_cost_per_token REAL DEFAULT 0,
+		cache_read_cost_per_token REAL DEFAULT 0,
+		cache_creation_cost_per_token REAL DEFAULT 0,
+		cache_creation_input_token_cost_above_1hr REAL DEFAULT 0,
+		supports_prompt_caching INTEGER DEFAULT 0,
+		source TEXT DEFAULT 'manual',
+		updated_at INTEGER NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS synced_prices (
+		model TEXT PRIMARY KEY,
+		input_cost_per_token REAL DEFAULT 0,
+		output_cost_per_token REAL DEFAULT 0,
+		cache_read_cost_per_token REAL DEFAULT 0,
+		cache_creation_cost_per_token REAL DEFAULT 0,
+		cache_creation_input_token_cost_above_1hr REAL DEFAULT 0,
+		supports_prompt_caching INTEGER DEFAULT 0,
+		source TEXT DEFAULT '',
+		updated_at INTEGER NOT NULL
+	);
 	`
-	_, err := s.db.Exec(schema)
-	return err
+	if _, err := s.db.Exec(schema); err != nil {
+		return err
+	}
+	return s.migrateSchema()
+}
+
+func (s *Storage) migrateSchema() error {
+	rows, err := s.db.Query("PRAGMA table_info(usage_records)")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	existingCols := make(map[string]bool)
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dfltValue any
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dfltValue, &pk); err == nil {
+			existingCols[strings.ToLower(name)] = true
+		}
+	}
+
+	newColumns := []struct {
+		name string
+		stmt string
+	}{
+		{"fail_summary", "ALTER TABLE usage_records ADD COLUMN fail_summary TEXT DEFAULT ''"},
+		{"header_error_kind", "ALTER TABLE usage_records ADD COLUMN header_error_kind TEXT DEFAULT ''"},
+		{"header_error_code", "ALTER TABLE usage_records ADD COLUMN header_error_code TEXT DEFAULT ''"},
+		{"header_trace_id", "ALTER TABLE usage_records ADD COLUMN header_trace_id TEXT DEFAULT ''"},
+		{"header_quota_recover_at_ms", "ALTER TABLE usage_records ADD COLUMN header_quota_recover_at_ms INTEGER DEFAULT 0"},
+		{"header_quota_used_percent", "ALTER TABLE usage_records ADD COLUMN header_quota_used_percent REAL DEFAULT NULL"},
+		{"header_secondary_quota_recover_at_ms", "ALTER TABLE usage_records ADD COLUMN header_secondary_quota_recover_at_ms INTEGER DEFAULT 0"},
+		{"header_secondary_quota_used_percent", "ALTER TABLE usage_records ADD COLUMN header_secondary_quota_used_percent REAL DEFAULT NULL"},
+		{"plan_type", "ALTER TABLE usage_records ADD COLUMN plan_type TEXT DEFAULT ''"},
+		{"response_model", "ALTER TABLE usage_records ADD COLUMN response_model TEXT DEFAULT ''"},
+		{"model_mismatch", "ALTER TABLE usage_records ADD COLUMN model_mismatch INTEGER DEFAULT 0"},
+	}
+
+	for _, col := range newColumns {
+		if !existingCols[col.name] {
+			if _, err := s.db.Exec(col.stmt); err != nil {
+				return fmt.Errorf("failed to add column %s: %w", col.name, err)
+			}
+		}
+	}
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_usage_model_mismatch ON usage_records(model_mismatch)")
+	return nil
 }
 
 // Ingest asynchronously enqueues a record for batch writing.
@@ -216,7 +337,11 @@ func (s *Storage) BatchInsertRecords(records []*Record) error {
 			api_key, session_id, parent_session_id, auth_id, auth_index,
 			auth_type, source, reasoning_effort, service_tier, generate,
 			requested_at, requested_at_unix, latency_ms, ttft_ms, failed,
-			failure_status_code, failure_body, input_tokens, output_tokens, reasoning_tokens,
+			failure_status_code, failure_body, fail_summary, header_error_kind, header_error_code,
+			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, plan_type,
+			response_model, model_mismatch,
+			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
 			input_cost, output_cost, cache_read_cost, cache_creation_cost, total_cost,
 			matched_model
@@ -226,6 +351,10 @@ func (s *Storage) BatchInsertRecords(records []*Record) error {
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?,
+			?, ?,
+			?, ?, ?,
 			?, ?, ?, ?,
 			?, ?, ?, ?, ?,
 			?
@@ -250,13 +379,21 @@ func (s *Storage) BatchInsertRecords(records []*Record) error {
 		if r.Failed {
 			failedInt = 1
 		}
+		mismatchInt := 0
+		if r.ModelMismatch {
+			mismatchInt = 1
+		}
 
 		res, err := stmt.Exec(
 			r.Provider, r.BaseURL, r.ExecutorType, r.Model, r.Alias,
 			r.APIKey, r.SessionID, r.ParentSessionID, r.AuthID, r.AuthIndex,
 			r.AuthType, r.Source, r.ReasoningEffort, r.ServiceTier, genInt,
 			reqAtUTC.Format("2006-01-02 15:04:05"), reqAtUTC.Unix(), r.LatencyMs, r.TTFTMs, failedInt,
-			r.FailureStatusCode, r.FailureBody, r.InputTokens, r.OutputTokens, r.ReasoningTokens,
+			r.FailureStatusCode, r.FailureBody, r.FailSummary, r.HeaderErrorKind, r.HeaderErrorCode,
+			r.HeaderTraceID, r.HeaderQuotaRecoverAtMS, r.HeaderQuotaUsedPercent,
+			r.HeaderSecondaryQuotaRecoverAtMS, r.HeaderSecondaryQuotaUsedPercent, r.PlanType,
+			r.ResponseModel, mismatchInt,
+			r.InputTokens, r.OutputTokens, r.ReasoningTokens,
 			r.CachedTokens, r.CacheReadTokens, r.CacheCreationTokens, r.TotalTokens,
 			r.InputCost, r.OutputCost, r.CacheReadCost, r.CacheCreationCost, r.TotalCost,
 			r.MatchedModel,
@@ -309,6 +446,14 @@ func buildWhereClause(filter QueryFilter) (string, []interface{}) {
 		}
 		where = append(where, "failed = ?")
 		args = append(args, failedInt)
+	}
+	if filter.ModelMismatch != nil {
+		mismatchInt := 0
+		if *filter.ModelMismatch {
+			mismatchInt = 1
+		}
+		where = append(where, "model_mismatch = ?")
+		args = append(args, mismatchInt)
 	}
 	if filter.Search != "" {
 		pattern := "%" + filter.Search + "%"
@@ -573,13 +718,7 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 	if page < 1 {
 		page = 1
 	}
-	pageSize := filter.PageSize
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
+	pageSize := ClampPageSize(filter.PageSize)
 	offset := (page - 1) * pageSize
 
 	query := `
@@ -588,7 +727,11 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 			api_key, session_id, parent_session_id, auth_id, auth_index,
 			auth_type, source, reasoning_effort, service_tier, generate,
 			requested_at, latency_ms, ttft_ms, failed,
-			failure_status_code, failure_body, input_tokens, output_tokens, reasoning_tokens,
+			failure_status_code, failure_body, fail_summary, header_error_kind, header_error_code,
+			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, plan_type,
+			response_model, model_mismatch,
+			input_tokens, output_tokens, reasoning_tokens,
 			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
 			input_cost, output_cost, cache_read_cost, cache_creation_cost, total_cost,
 			matched_model
@@ -608,15 +751,21 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 	var records []*Record
 	for rows.Next() {
 		r := &Record{}
-		var genInt, failedInt int
+		var genInt, failedInt, mismatchInt int
 		var reqAtStr string
+		var quotaUsedPct, secQuotaUsedPct sql.NullFloat64
+		var failSummary, headerErrorKind, headerErrorCode, headerTraceID, planType, respModel sql.NullString
 
 		if err := rows.Scan(
 			&r.ID, &r.Provider, &r.BaseURL, &r.ExecutorType, &r.Model, &r.Alias,
 			&r.APIKey, &r.SessionID, &r.ParentSessionID, &r.AuthID, &r.AuthIndex,
 			&r.AuthType, &r.Source, &r.ReasoningEffort, &r.ServiceTier, &genInt,
 			&reqAtStr, &r.LatencyMs, &r.TTFTMs, &failedInt,
-			&r.FailureStatusCode, &r.FailureBody, &r.InputTokens, &r.OutputTokens, &r.ReasoningTokens,
+			&r.FailureStatusCode, &r.FailureBody, &failSummary, &headerErrorKind, &headerErrorCode,
+			&headerTraceID, &r.HeaderQuotaRecoverAtMS, &quotaUsedPct,
+			&r.HeaderSecondaryQuotaRecoverAtMS, &secQuotaUsedPct, &planType,
+			&respModel, &mismatchInt,
+			&r.InputTokens, &r.OutputTokens, &r.ReasoningTokens,
 			&r.CachedTokens, &r.CacheReadTokens, &r.CacheCreationTokens, &r.TotalTokens,
 			&r.InputCost, &r.OutputCost, &r.CacheReadCost, &r.CacheCreationCost, &r.TotalCost,
 			&r.MatchedModel,
@@ -626,6 +775,31 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 
 		r.Generate = genInt == 1
 		r.Failed = failedInt == 1
+		r.ModelMismatch = mismatchInt == 1
+		if respModel.Valid {
+			r.ResponseModel = respModel.String
+		}
+		if failSummary.Valid {
+			r.FailSummary = failSummary.String
+		}
+		if headerErrorKind.Valid {
+			r.HeaderErrorKind = headerErrorKind.String
+		}
+		if headerErrorCode.Valid {
+			r.HeaderErrorCode = headerErrorCode.String
+		}
+		if headerTraceID.Valid {
+			r.HeaderTraceID = headerTraceID.String
+		}
+		if quotaUsedPct.Valid {
+			r.HeaderQuotaUsedPercent = &quotaUsedPct.Float64
+		}
+		if secQuotaUsedPct.Valid {
+			r.HeaderSecondaryQuotaUsedPercent = &secQuotaUsedPct.Float64
+		}
+		if planType.Valid {
+			r.PlanType = planType.String
+		}
 		if t, err := time.Parse("2006-01-02 15:04:05", reqAtStr); err == nil {
 			r.RequestedAt = t
 		}
@@ -634,6 +808,161 @@ func (s *Storage) GetRecords(filter RecordQueryFilter) ([]*Record, int64, error)
 	}
 
 	return records, total, rows.Err()
+}
+
+// SaveCustomPrice persists a custom price override.
+func (s *Storage) SaveCustomPrice(r CustomPriceRecord) error {
+	stmt := `
+		INSERT INTO custom_prices (
+			model, input_cost_per_token, output_cost_per_token,
+			cache_read_cost_per_token, cache_creation_cost_per_token,
+			cache_creation_input_token_cost_above_1hr, supports_prompt_caching,
+			source, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(model) DO UPDATE SET
+			input_cost_per_token=excluded.input_cost_per_token,
+			output_cost_per_token=excluded.output_cost_per_token,
+			cache_read_cost_per_token=excluded.cache_read_cost_per_token,
+			cache_creation_cost_per_token=excluded.cache_creation_cost_per_token,
+			cache_creation_input_token_cost_above_1hr=excluded.cache_creation_input_token_cost_above_1hr,
+			supports_prompt_caching=excluded.supports_prompt_caching,
+			source=excluded.source,
+			updated_at=excluded.updated_at
+	`
+	cachingInt := 0
+	if r.SupportsPromptCaching {
+		cachingInt = 1
+	}
+	_, err := s.db.Exec(stmt,
+		strings.ToLower(strings.TrimSpace(r.Model)),
+		r.InputCostPerToken, r.OutputCostPerToken,
+		r.CacheReadCostPerToken, r.CacheCreationCostPerToken,
+		r.CacheCreationInputTokenCostAbove1hr, cachingInt,
+		r.Source, r.UpdatedAt,
+	)
+	return err
+}
+
+// DeleteCustomPrice removes a custom price override.
+func (s *Storage) DeleteCustomPrice(model string) error {
+	_, err := s.db.Exec("DELETE FROM custom_prices WHERE model = ?", strings.ToLower(strings.TrimSpace(model)))
+	return err
+}
+
+// LoadCustomPrices reads all persisted custom price overrides.
+func (s *Storage) LoadCustomPrices() ([]CustomPriceRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT model, input_cost_per_token, output_cost_per_token,
+		       cache_read_cost_per_token, cache_creation_cost_per_token,
+		       cache_creation_input_token_cost_above_1hr, supports_prompt_caching,
+		       source, updated_at
+		FROM custom_prices
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []CustomPriceRecord
+	for rows.Next() {
+		var r CustomPriceRecord
+		var cachingInt int
+		if err := rows.Scan(
+			&r.Model, &r.InputCostPerToken, &r.OutputCostPerToken,
+			&r.CacheReadCostPerToken, &r.CacheCreationCostPerToken,
+			&r.CacheCreationInputTokenCostAbove1hr, &cachingInt,
+			&r.Source, &r.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		r.SupportsPromptCaching = cachingInt == 1
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
+// SaveSyncedPricesBatch persists a batch of synced prices.
+func (s *Storage) SaveSyncedPricesBatch(records []SyncedPriceRecord) error {
+	if len(records) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO synced_prices (
+			model, input_cost_per_token, output_cost_per_token,
+			cache_read_cost_per_token, cache_creation_cost_per_token,
+			cache_creation_input_token_cost_above_1hr, supports_prompt_caching,
+			source, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(model) DO UPDATE SET
+			input_cost_per_token=excluded.input_cost_per_token,
+			output_cost_per_token=excluded.output_cost_per_token,
+			cache_read_cost_per_token=excluded.cache_read_cost_per_token,
+			cache_creation_cost_per_token=excluded.cache_creation_cost_per_token,
+			cache_creation_input_token_cost_above_1hr=excluded.cache_creation_input_token_cost_above_1hr,
+			supports_prompt_caching=excluded.supports_prompt_caching,
+			source=excluded.source,
+			updated_at=excluded.updated_at
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, r := range records {
+		cachingInt := 0
+		if r.SupportsPromptCaching {
+			cachingInt = 1
+		}
+		if _, err := stmt.Exec(
+			strings.ToLower(strings.TrimSpace(r.Model)),
+			r.InputCostPerToken, r.OutputCostPerToken,
+			r.CacheReadCostPerToken, r.CacheCreationCostPerToken,
+			r.CacheCreationInputTokenCostAbove1hr, cachingInt,
+			r.Source, r.UpdatedAt,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// LoadSyncedPrices reads all persisted synced prices.
+func (s *Storage) LoadSyncedPrices() ([]SyncedPriceRecord, error) {
+	rows, err := s.db.Query(`
+		SELECT model, input_cost_per_token, output_cost_per_token,
+		       cache_read_cost_per_token, cache_creation_cost_per_token,
+		       cache_creation_input_token_cost_above_1hr, supports_prompt_caching,
+		       source, updated_at
+		FROM synced_prices
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []SyncedPriceRecord
+	for rows.Next() {
+		var r SyncedPriceRecord
+		var cachingInt int
+		if err := rows.Scan(
+			&r.Model, &r.InputCostPerToken, &r.OutputCostPerToken,
+			&r.CacheReadCostPerToken, &r.CacheCreationCostPerToken,
+			&r.CacheCreationInputTokenCostAbove1hr, &cachingInt,
+			&r.Source, &r.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		r.SupportsPromptCaching = cachingInt == 1
+		records = append(records, r)
+	}
+	return records, rows.Err()
 }
 
 // GetFilterOptions retrieves distinct filter dropdown choices.
@@ -717,4 +1046,392 @@ func (s *Storage) Cleanup(before time.Time) (int64, error) {
 // Ping checks database health.
 func (s *Storage) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
+}
+
+// GetDiagnosticStats calculates error telemetry, status code distributions, and recent failure logs.
+func (s *Storage) GetDiagnosticStats(filter QueryFilter, recentLimit int) (*DiagnosticStats, error) {
+	if recentLimit <= 0 {
+		recentLimit = 50
+	}
+	// Recent errors are fetched through GetRecords, which caps a page at
+	// MaxPageSize. Clamp here as well so the caller is not promised more
+	// rows than can actually be returned.
+	if recentLimit > MaxPageSize {
+		recentLimit = MaxPageSize
+	}
+
+	where, args := buildWhereClause(filter)
+
+	// Total & Failed counts
+	countsQuery := `
+		SELECT 
+			COUNT(*),
+			COALESCE(SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END), 0)
+		FROM usage_records
+	` + where
+
+	var totalReqs, failedReqs int64
+	if err := s.db.QueryRow(countsQuery, args...).Scan(&totalReqs, &failedReqs); err != nil {
+		return nil, fmt.Errorf("failed to get diagnostic counts: %w", err)
+	}
+
+	stats := &DiagnosticStats{
+		TotalRequests:  totalReqs,
+		FailedRequests: failedReqs,
+		ByStatusCode:   make([]DiagnosticErrorGroup, 0),
+		ByErrorKind:    make([]DiagnosticErrorGroup, 0),
+		ByErrorCode:    make([]DiagnosticErrorGroup, 0),
+		ByProvider:     make([]DiagnosticErrorGroup, 0),
+		ByModel:        make([]DiagnosticErrorGroup, 0),
+		RecentErrors:   make([]*Record, 0),
+	}
+
+	if totalReqs > 0 {
+		stats.FailureRate = float64(failedReqs) / float64(totalReqs)
+	}
+
+	if failedReqs == 0 {
+		return stats, nil
+	}
+
+	// Filter for failures
+	failedFilter := filter
+	failedVal := true
+	failedFilter.Failed = &failedVal
+	failedWhere, failedArgs := buildWhereClause(failedFilter)
+
+	// Helper to query grouping
+	queryGrouping := func(colExpr, filterCondition string, limit int) ([]DiagnosticErrorGroup, error) {
+		cond := failedWhere
+		if filterCondition != "" {
+			if cond == "" {
+				cond = " WHERE " + filterCondition
+			} else {
+				cond = cond + " AND " + filterCondition
+			}
+		}
+		q := fmt.Sprintf(`
+			SELECT %s AS grp_key, COUNT(*) AS grp_count
+			FROM usage_records
+			%s
+			GROUP BY grp_key
+			ORDER BY grp_count DESC
+			LIMIT %d
+		`, colExpr, cond, limit)
+
+		rows, err := s.db.Query(q, failedArgs...)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+
+		var groups []DiagnosticErrorGroup
+		for rows.Next() {
+			var k sql.NullString
+			var c int64
+			if err := rows.Scan(&k, &c); err == nil {
+				keyStr := k.String
+				if !k.Valid || keyStr == "" {
+					keyStr = "unknown"
+				}
+				groups = append(groups, DiagnosticErrorGroup{Key: keyStr, Count: c})
+			}
+		}
+		return groups, rows.Err()
+	}
+
+	// By status code
+	if g, err := queryGrouping("CAST(failure_status_code AS TEXT)", "failure_status_code > 0", 20); err == nil {
+		stats.ByStatusCode = g
+	}
+
+	// By error kind
+	if g, err := queryGrouping("header_error_kind", "header_error_kind != ''", 20); err == nil {
+		stats.ByErrorKind = g
+	}
+
+	// By error code
+	if g, err := queryGrouping("header_error_code", "header_error_code != ''", 20); err == nil {
+		stats.ByErrorCode = g
+	}
+
+	// By provider
+	if g, err := queryGrouping("provider", "", 20); err == nil {
+		stats.ByProvider = g
+	}
+
+	// By model
+	if g, err := queryGrouping("model", "", 20); err == nil {
+		stats.ByModel = g
+	}
+
+	// Model Mismatches count
+	var mismatches int64
+	mismatchWhere, mismatchArgs := buildWhereClause(filter)
+	mismatchCond := "WHERE model_mismatch = 1"
+	if mismatchWhere != "" {
+		mismatchCond = mismatchWhere + " AND model_mismatch = 1"
+	}
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM usage_records "+mismatchCond, mismatchArgs...).Scan(&mismatches)
+	stats.ModelMismatches = mismatches
+
+	// By Mismatch Pair (e.g. gpt-4o -> gpt-4o-mini)
+	mismatchRows, err := s.db.Query(`
+		SELECT (model || ' -> ' || response_model) AS grp_key, COUNT(*) AS grp_count
+		FROM usage_records
+		`+mismatchCond+`
+		GROUP BY grp_key
+		ORDER BY grp_count DESC
+		LIMIT 20
+	`, mismatchArgs...)
+	if err == nil {
+		defer mismatchRows.Close()
+		var pairs []DiagnosticErrorGroup
+		for mismatchRows.Next() {
+			var k sql.NullString
+			var c int64
+			if err := mismatchRows.Scan(&k, &c); err == nil && k.Valid && k.String != "" {
+				pairs = append(pairs, DiagnosticErrorGroup{Key: k.String, Count: c})
+			}
+		}
+		stats.ByMismatchPair = pairs
+	}
+
+	// Recent errors
+	recentRecords, _, err := s.GetRecords(RecordQueryFilter{
+		QueryFilter: failedFilter,
+		Page:        1,
+		PageSize:    recentLimit,
+	})
+	if err == nil && recentRecords != nil {
+		stats.RecentErrors = recentRecords
+	}
+
+	return stats, nil
+}
+
+// ExportRecords queries usage records for export matching the given filter.
+func (s *Storage) ExportRecords(filter QueryFilter, limit int) ([]*Record, error) {
+	limit = ClampExportLimit(limit)
+	where, args := buildWhereClause(filter)
+	query := `
+		SELECT
+			id, provider, base_url, executor_type, model, alias,
+			api_key, session_id, parent_session_id, auth_id, auth_index,
+			auth_type, source, reasoning_effort, service_tier, generate,
+			requested_at, latency_ms, ttft_ms, failed,
+			failure_status_code, failure_body, fail_summary, header_error_kind, header_error_code,
+			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, plan_type,
+			response_model, model_mismatch,
+			input_tokens, output_tokens, reasoning_tokens,
+			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+			input_cost, output_cost, cache_read_cost, cache_creation_cost, total_cost,
+			matched_model
+		FROM usage_records
+		` + where + `
+		ORDER BY requested_at_unix ASC, id ASC
+		LIMIT ?
+	`
+	queryArgs := append(args, limit)
+
+	rows, err := s.db.Query(query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query records for export: %w", err)
+	}
+	defer rows.Close()
+
+	var records []*Record
+	for rows.Next() {
+		r := &Record{}
+		var genInt, failedInt, mismatchInt int
+		var reqAtStr string
+		var quotaUsedPct, secQuotaUsedPct sql.NullFloat64
+		var failSummary, headerErrorKind, headerErrorCode, headerTraceID, planType, respModel sql.NullString
+
+		if err := rows.Scan(
+			&r.ID, &r.Provider, &r.BaseURL, &r.ExecutorType, &r.Model, &r.Alias,
+			&r.APIKey, &r.SessionID, &r.ParentSessionID, &r.AuthID, &r.AuthIndex,
+			&r.AuthType, &r.Source, &r.ReasoningEffort, &r.ServiceTier, &genInt,
+			&reqAtStr, &r.LatencyMs, &r.TTFTMs, &failedInt,
+			&r.FailureStatusCode, &r.FailureBody, &failSummary, &headerErrorKind, &headerErrorCode,
+			&headerTraceID, &r.HeaderQuotaRecoverAtMS, &quotaUsedPct,
+			&r.HeaderSecondaryQuotaRecoverAtMS, &secQuotaUsedPct, &planType,
+			&respModel, &mismatchInt,
+			&r.InputTokens, &r.OutputTokens, &r.ReasoningTokens,
+			&r.CachedTokens, &r.CacheReadTokens, &r.CacheCreationTokens, &r.TotalTokens,
+			&r.InputCost, &r.OutputCost, &r.CacheReadCost, &r.CacheCreationCost, &r.TotalCost,
+			&r.MatchedModel,
+		); err != nil {
+			return nil, err
+		}
+
+		r.Generate = genInt == 1
+		r.Failed = failedInt == 1
+		r.ModelMismatch = mismatchInt == 1
+		if respModel.Valid {
+			r.ResponseModel = respModel.String
+		}
+		if failSummary.Valid {
+			r.FailSummary = failSummary.String
+		}
+		if headerErrorKind.Valid {
+			r.HeaderErrorKind = headerErrorKind.String
+		}
+		if headerErrorCode.Valid {
+			r.HeaderErrorCode = headerErrorCode.String
+		}
+		if headerTraceID.Valid {
+			r.HeaderTraceID = headerTraceID.String
+		}
+		if quotaUsedPct.Valid {
+			r.HeaderQuotaUsedPercent = &quotaUsedPct.Float64
+		}
+		if secQuotaUsedPct.Valid {
+			r.HeaderSecondaryQuotaUsedPercent = &secQuotaUsedPct.Float64
+		}
+		if planType.Valid {
+			r.PlanType = planType.String
+		}
+		if t, err := time.Parse("2006-01-02 15:04:05", reqAtStr); err == nil {
+			r.RequestedAt = t
+		}
+
+		records = append(records, r)
+	}
+
+	return records, rows.Err()
+}
+
+// ImportRecords batch inserts imported records and skips duplicate items.
+func (s *Storage) ImportRecords(records []*Record) (int, int, error) {
+	if len(records) == 0 {
+		return 0, 0, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to begin import tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	stmtCheckSession, err := tx.Prepare("SELECT 1 FROM usage_records WHERE session_id = ? LIMIT 1")
+	if err != nil {
+		return 0, 0, fmt.Errorf("prepare session check failed: %w", err)
+	}
+	defer stmtCheckSession.Close()
+
+	stmtCheckSig, err := tx.Prepare(`
+		SELECT 1 FROM usage_records 
+		WHERE requested_at_unix = ? AND model = ? AND auth_id = ? AND total_tokens = ? AND latency_ms = ? 
+		LIMIT 1
+	`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("prepare signature check failed: %w", err)
+	}
+	defer stmtCheckSig.Close()
+
+	insertStmt, err := tx.Prepare(`
+		INSERT INTO usage_records (
+			provider, base_url, executor_type, model, alias,
+			api_key, session_id, parent_session_id, auth_id, auth_index,
+			auth_type, source, reasoning_effort, service_tier, generate,
+			requested_at, requested_at_unix, latency_ms, ttft_ms, failed,
+			failure_status_code, failure_body, fail_summary, header_error_kind, header_error_code,
+			header_trace_id, header_quota_recover_at_ms, header_quota_used_percent,
+			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, plan_type,
+			response_model, model_mismatch,
+			input_tokens, output_tokens, reasoning_tokens,
+			cached_tokens, cache_read_tokens, cache_creation_tokens, total_tokens,
+			input_cost, output_cost, cache_read_cost, cache_creation_cost, total_cost,
+			matched_model
+		) VALUES (
+			?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?,
+			?, ?, ?, ?, ?,
+			?, ?, ?,
+			?, ?, ?,
+			?, ?,
+			?, ?, ?,
+			?, ?, ?, ?,
+			?, ?, ?, ?, ?,
+			?
+		)
+	`)
+	if err != nil {
+		return 0, 0, fmt.Errorf("prepare insert stmt failed: %w", err)
+	}
+	defer insertStmt.Close()
+
+	imported := 0
+	skipped := 0
+
+	for _, r := range records {
+		reqAt := r.RequestedAt
+		if reqAt.IsZero() {
+			reqAt = time.Now()
+		}
+		reqAtUTC := reqAt.UTC()
+		unixSec := reqAtUTC.Unix()
+
+		// 1. Deduplication check
+		isDup := false
+		if r.SessionID != "" {
+			var dummy int
+			if err := stmtCheckSession.QueryRow(r.SessionID).Scan(&dummy); err == nil {
+				isDup = true
+			}
+		} else {
+			var dummy int
+			if err := stmtCheckSig.QueryRow(unixSec, r.Model, r.AuthID, r.TotalTokens, r.LatencyMs).Scan(&dummy); err == nil {
+				isDup = true
+			}
+		}
+
+		if isDup {
+			skipped++
+			continue
+		}
+
+		genInt := 0
+		if r.Generate {
+			genInt = 1
+		}
+		failedInt := 0
+		if r.Failed {
+			failedInt = 1
+		}
+		mismatchInt := 0
+		if r.ModelMismatch {
+			mismatchInt = 1
+		}
+
+		if _, err := insertStmt.Exec(
+			r.Provider, r.BaseURL, r.ExecutorType, r.Model, r.Alias,
+			r.APIKey, r.SessionID, r.ParentSessionID, r.AuthID, r.AuthIndex,
+			r.AuthType, r.Source, r.ReasoningEffort, r.ServiceTier, genInt,
+			reqAtUTC.Format("2006-01-02 15:04:05"), unixSec, r.LatencyMs, r.TTFTMs, failedInt,
+			r.FailureStatusCode, r.FailureBody, r.FailSummary, r.HeaderErrorKind, r.HeaderErrorCode,
+			r.HeaderTraceID, r.HeaderQuotaRecoverAtMS, r.HeaderQuotaUsedPercent,
+			r.HeaderSecondaryQuotaRecoverAtMS, r.HeaderSecondaryQuotaUsedPercent, r.PlanType,
+			r.ResponseModel, mismatchInt,
+			r.InputTokens, r.OutputTokens, r.ReasoningTokens,
+			r.CachedTokens, r.CacheReadTokens, r.CacheCreationTokens, r.TotalTokens,
+			r.InputCost, r.OutputCost, r.CacheReadCost, r.CacheCreationCost, r.TotalCost,
+			r.MatchedModel,
+		); err != nil {
+			return imported, skipped, fmt.Errorf("failed to insert imported record: %w", err)
+		}
+		imported++
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, 0, fmt.Errorf("failed to commit import tx: %w", err)
+	}
+
+	return imported, skipped, nil
 }
