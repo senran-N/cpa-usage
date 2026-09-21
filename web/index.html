@@ -385,6 +385,18 @@
       outline: none;
       transition: border-color .15s;
     }
+    /* Masks the key without using type="password": a password field anywhere on
+       the page makes Chrome treat it as a login form and autofill the saved
+       username into the nearest text box, which was hijacking the filter box. */
+    .masked-input {
+      -webkit-text-security: disc;
+      text-security: disc;
+    }
+    .search-input::-webkit-search-cancel-button,
+    .search-input::-webkit-search-decoration {
+      -webkit-appearance: none;
+      appearance: none;
+    }
     .search-input:focus {
       border-color: var(--border-hover);
       background: var(--bg-card);
@@ -913,7 +925,10 @@
       <div class="cpa-dropdown" id="dropdownInterval"></div>
       <div class="search-input-wrap">
         <svg class="search-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" id="filterSearch" class="search-input" placeholder="搜索模型 / 账号 / Key / 错误...">
+        <input type="search" id="filterSearch" class="search-input" name="cpa-usage-filter"
+               placeholder="搜索模型 / 账号 / Key / 错误..."
+               autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+               data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other">
       </div>
     </div>
 
@@ -1120,7 +1135,7 @@
         <div class="form-row">
           <label class="form-label">方式 1：删除指定某一日期之前的所有历史数据</label>
           <div style="display: flex; gap: 8px;">
-            <input type="date" id="cleanupSpecificDate" class="form-input" style="flex: 1;">
+            <input type="date" id="cleanupSpecificDate" class="form-input" style="flex: 1;" autocomplete="off" data-1p-ignore data-lpignore="true">
             <button id="btnCleanByDate" class="action-btn action-danger">按此日期清理</button>
           </div>
         </div>
@@ -1128,7 +1143,7 @@
         <div class="form-row">
           <label class="form-label">方式 2：按保留天数清理（删除 N 天前的历史记录）</label>
           <div style="display: flex; gap: 8px;">
-            <input type="number" id="cleanupDaysInput" class="form-input" placeholder="保留最近天数（默认 90 天）" value="90" style="flex: 1;">
+            <input type="number" id="cleanupDaysInput" class="form-input" placeholder="保留最近天数（默认 90 天）" value="90" style="flex: 1;" autocomplete="off" data-1p-ignore data-lpignore="true">
             <button id="btnCleanByDays" class="action-btn action-danger">按天数清理</button>
           </div>
         </div>
@@ -1177,8 +1192,10 @@
         </p>
         <div class="form-row">
           <label class="form-label" for="authKeyInput">管理密钥</label>
-          <input type="password" id="authKeyInput" class="form-input" autocomplete="current-password"
-                 placeholder="Management Key" style="width: 100%;">
+          <input type="text" id="authKeyInput" class="form-input masked-input" name="cpa-usage-key"
+                 placeholder="Management Key" style="width: 100%;"
+                 autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                 data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other">
         </div>
         <div id="authError" style="display: none; color: var(--error-color); font-size: 12.5px; padding-top: 2px;"></div>
         <p style="color: var(--text-tertiary); font-size: 11.5px; line-height: 1.6; padding-top: 4px;">
