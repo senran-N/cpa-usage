@@ -143,10 +143,24 @@ python scripts/patch_observe.py --restore  # 从 .bak 还原
 - 价格表来自 LiteLLM 的 `model_prices_and_context_window.json` 快照，内嵌在二进制中，不会自动更新。供应商调价后需要重新构建。
 - 模型名采用多级模糊匹配（精确匹配 → 前缀清洗 → 系列匹配 → 子串匹配）。未收录的模型会落到同系列的近似价格上，匹配结果记录在 `matched_model` 字段中，可据此核对。
 - 完全无法匹配的模型记为 0 成本，而非报错。
-- 输入 token 按 `input − cache_read − cache_creation` 折算为新鲜输入。若上游的 token 口径与此不同，结果会偏差。
 - 价格表未给出缓存价时按启发式推导：缓存读取取输入价的 50%，Claude 系列的缓存写入取输入价的 1.25 倍。
-- DeepSeek 使用内置的峰谷逻辑（北京时间工作日 09:00–12:00 与 14:00–18:00 按 2.0 倍计），它是一个近似，并不等同于 DeepSeek 官方公布的错峰折扣规则。
-- 不计入图片、音频、Web 搜索等按次计费项。
+- DeepSeek 按内置峰谷逻辑计价：工作日 UTC 01:00–04:00 与 06:00–10:00（即北京时间 09:00–12:00、14:00–18:00）按 2 倍低谷价计，北京时间周末全天低谷。该逻辑与 sub2api 的实现一致；是否完全等同 DeepSeek 官方公布的错峰规则未经核实。
+- 该分支在匹配链最前面短路，因此 `prices.json` 中的 deepseek 条目不会被使用。
+- 不计入图片、音频、Web 搜索等按次计费项，也不区分 service tier、长上下文阶梯与 5m/1h 两档缓存写入价。
+
+### Token 口径
+
+CPA 按上游协议的原生口径透传 token，并不把它归一后再交给插件——归一结果存在 `Detail.TokenBreakdown` 里，而插件只收到扁平计数。三种口径分别是：
+
+| 上游 | `input_tokens` 含缓存 | `output_tokens` 含推理 | 上报的 `total_tokens` |
+|---|---|---|---|
+| OpenAI 系 | 含 | 含 | `input + output` |
+| Claude Messages | 不含 | 含 | `input + output + cache_read + cache_write` |
+| Gemini 系 / Interactions | 含 | 不含 | `input + output + reasoning` |
+
+因此插件不能一刀切地扣缓存或忽略推理。计费前会用上报的 `total_tokens` 与三种形状比对来还原口径，再决定是否从输入中扣除缓存、是否把推理 token 计入输出；缓存或推理为零时三种形状重合，判断结果不影响金额。无法比对时（`total_tokens` 缺失）退回结构性判断：缓存数超过输入数则必然是独立口径，推理数超过输出数同理。
+
+这样做而不是按 provider 名判断，是因为 OpenAI 兼容端点的 provider 名可由运营者自定义，不可靠。
 
 ## 数据与保留
 

@@ -360,12 +360,100 @@ func (e *Engine) GetModelPricing(modelName string, at time.Time) (*ModelPricing,
 	return nil, ""
 }
 
+// Usage carries the token counters a single request reported.
+//
+// The host forwards whatever convention the upstream protocol uses, so the
+// same field can mean different things depending on the provider. See
+// resolveConvention.
+type Usage struct {
+	InputTokens         int64
+	OutputTokens        int64
+	ReasoningTokens     int64
+	CacheReadTokens     int64
+	CacheCreationTokens int64
+	// TotalTokens is the upstream total. It is what lets the two conventions be
+	// told apart; zero means the detection falls back to structural checks.
+	TotalTokens int64
+}
+
+// convention records how a provider's counters nest, so the cost math can
+// avoid both double counting and dropping tokens on the floor.
+type convention struct {
+	// InputIncludesCache reports whether CacheReadTokens and CacheCreationTokens
+	// are already part of InputTokens, in which case they must be subtracted to
+	// get the tokens billed at the uncached input rate.
+	InputIncludesCache bool
+	// OutputIncludesReasoning reports whether ReasoningTokens are already part of
+	// OutputTokens. When they are not, they have to be added or the thinking
+	// tokens are never billed.
+	OutputIncludesReasoning bool
+}
+
+// resolveConvention infers how the counters nest.
+//
+// CLIProxyAPI normalizes this internally into Detail.TokenBreakdown, but only
+// the flat counters reach a plugin, so it has to be recovered here. The three
+// shapes the host produces are:
+//
+//	OpenAI style   total = input + output                          (cache ⊂ input, reasoning ⊂ output)
+//	Claude style   total = input + output + cacheRead + cacheWrite (cache ⊥ input, reasoning ⊂ output)
+//	Gemini style   total = input + output + reasoning              (cache ⊂ input, reasoning ⊥ output)
+//
+// Matching the reported total against each shape identifies the provider
+// without relying on provider names, which are free-form for OpenAI-compatible
+// endpoints. Where a counter is zero the shapes coincide and the choice does
+// not affect the result.
+func resolveConvention(u Usage) convention {
+	c := convention{InputIncludesCache: true, OutputIncludesReasoning: true}
+
+	cacheTotal := u.CacheReadTokens + u.CacheCreationTokens
+
+	// Cache cannot be a subset of input if it exceeds it. This holds regardless
+	// of whether a total was reported.
+	if cacheTotal > u.InputTokens {
+		c.InputIncludesCache = false
+	} else if u.TotalTokens > 0 && cacheTotal > 0 {
+		subset := u.InputTokens + u.OutputTokens
+		independent := subset + cacheTotal
+		if u.TotalTokens == independent && u.TotalTokens != subset {
+			c.InputIncludesCache = false
+		}
+	}
+
+	// Same reasoning for thinking tokens against the output bucket.
+	if u.ReasoningTokens > u.OutputTokens {
+		c.OutputIncludesReasoning = false
+	} else if u.TotalTokens > 0 && u.ReasoningTokens > 0 {
+		subset := u.InputTokens + u.OutputTokens
+		separate := subset + u.ReasoningTokens
+		if u.TotalTokens == separate && u.TotalTokens != subset {
+			c.OutputIncludesReasoning = false
+		}
+	}
+
+	return c
+}
+
 // CalculateCost computes detailed costs for a request based on token usage.
+//
+// Deprecated: prefer CalculateUsageCost, which takes the reported total and can
+// therefore tell the provider conventions apart.
 func (e *Engine) CalculateCost(
 	modelName string,
 	requestedAt time.Time,
 	inputTokens, outputTokens, reasoningTokens, cacheReadTokens, cacheCreationTokens int64,
 ) CostBreakdown {
+	return e.CalculateUsageCost(modelName, requestedAt, Usage{
+		InputTokens:         inputTokens,
+		OutputTokens:        outputTokens,
+		ReasoningTokens:     reasoningTokens,
+		CacheReadTokens:     cacheReadTokens,
+		CacheCreationTokens: cacheCreationTokens,
+	})
+}
+
+// CalculateUsageCost computes detailed costs for a request based on token usage.
+func (e *Engine) CalculateUsageCost(modelName string, requestedAt time.Time, u Usage) CostBreakdown {
 	pricing, matched := e.GetModelPricing(modelName, requestedAt)
 	if pricing == nil {
 		return CostBreakdown{
@@ -373,22 +461,36 @@ func (e *Engine) CalculateCost(
 		}
 	}
 
-	// In standard LLM accounting (OpenAI/Anthropic), prompt tokens (inputTokens) includes cache hits.
-	// We separate actual fresh input tokens from cache read and cache creation.
-	actualInput := inputTokens - cacheReadTokens - cacheCreationTokens
-	if actualInput < 0 {
-		actualInput = 0
+	conv := resolveConvention(u)
+
+	// Tokens billed at the uncached input rate.
+	uncachedInput := u.InputTokens
+	if conv.InputIncludesCache {
+		uncachedInput -= u.CacheReadTokens + u.CacheCreationTokens
+	}
+	if uncachedInput < 0 {
+		uncachedInput = 0
 	}
 
-	inputCost := float64(actualInput) * pricing.InputCostPerToken
-	outputCost := float64(outputTokens) * pricing.OutputCostPerToken
+	// Tokens billed at the output rate. Thinking tokens are charged as output by
+	// every provider here; they are only listed apart in some protocols.
+	billableOutput := u.OutputTokens
+	if !conv.OutputIncludesReasoning {
+		billableOutput += u.ReasoningTokens
+	}
+	if billableOutput < 0 {
+		billableOutput = 0
+	}
+
+	inputCost := float64(uncachedInput) * pricing.InputCostPerToken
+	outputCost := float64(billableOutput) * pricing.OutputCostPerToken
 
 	cacheReadPrice := pricing.CacheReadInputTokenCost
 	if cacheReadPrice <= 0 && pricing.SupportsPromptCaching {
 		// Default to 50% of input price if prompt caching is supported but price is unspecified
 		cacheReadPrice = pricing.InputCostPerToken * 0.5
 	}
-	cacheReadCost := float64(cacheReadTokens) * cacheReadPrice
+	cacheReadCost := float64(u.CacheReadTokens) * cacheReadPrice
 
 	cacheCreationPrice := pricing.CacheCreationInputTokenCost
 	if cacheCreationPrice <= 0 && pricing.SupportsPromptCaching {
@@ -397,7 +499,7 @@ func (e *Engine) CalculateCost(
 			cacheCreationPrice = pricing.InputCostPerToken * 1.25
 		}
 	}
-	cacheCreationCost := float64(cacheCreationTokens) * cacheCreationPrice
+	cacheCreationCost := float64(u.CacheCreationTokens) * cacheCreationPrice
 
 	totalCost := inputCost + outputCost + cacheReadCost + cacheCreationCost
 

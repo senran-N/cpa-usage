@@ -183,16 +183,17 @@ func (p *Plugin) HandleUsage(payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("failed to unmarshal usage record: %w", err)
 	}
 
-	// Calculate cost
-	cost := pricingEngine.CalculateCost(
-		rec.Model,
-		rec.RequestedAt,
-		rec.Detail.InputTokens,
-		rec.Detail.OutputTokens,
-		rec.Detail.ReasoningTokens,
-		rec.Detail.CacheReadTokens,
-		rec.Detail.CacheCreationTokens,
-	)
+	// Calculate cost. TotalTokens is passed along because the host forwards each
+	// upstream's native token convention rather than a normalized one, and the
+	// reported total is what lets those conventions be told apart.
+	cost := pricingEngine.CalculateUsageCost(rec.Model, rec.RequestedAt, pricing.Usage{
+		InputTokens:         rec.Detail.InputTokens,
+		OutputTokens:        rec.Detail.OutputTokens,
+		ReasoningTokens:     rec.Detail.ReasoningTokens,
+		CacheReadTokens:     rec.Detail.CacheReadTokens,
+		CacheCreationTokens: rec.Detail.CacheCreationTokens,
+		TotalTokens:         rec.Detail.TotalTokens,
+	})
 
 	storageRec := &storage.Record{
 		Provider:            rec.Provider,
