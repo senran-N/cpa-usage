@@ -3980,9 +3980,7 @@
     async function loadPrices() {
       try {
         const data = await fetchJSON(API_BASE + '/prices');
-        // The pricing API returns the catalog under `models` (not `prices`).
-        // Keep the legacy `prices` fallback so older plugin responses remain usable.
-        state.pricesData = (data && (data.models || data.prices)) || [];
+        state.pricesData = data.models || [];
         renderPricesTable();
       } catch (err) {
         console.error('load prices failed:', err);
@@ -4014,28 +4012,28 @@
 
       tbody.innerHTML = list.map(p => {
         let srcBadge = '<span class="badge badge-neutral">内置默认</span>';
-        if (p.source === 'custom') {
+        if (p.is_custom) {
           srcBadge = '<span class="badge badge-warning">自定义覆盖</span>';
-        } else if (p.source === 'synced') {
-          srcBadge = `<span class="badge badge-success">在线同步 (${esc(p.synced_from || 'litellm')})</span>`;
+        } else if (p.source) {
+          srcBadge = `<span class="badge badge-success">${esc(p.source)}</span>`;
         }
 
-        const isCustom = p.source === 'custom';
+        const isCustom = !!p.is_custom;
         const actionsHtml = isCustom ? `
-          <button class="table-btn" onclick="editPriceOverride(${jsArg(p.model)}, ${p.input_price}, ${p.output_price}, ${p.cache_read_price}, ${p.cache_creation_price})">编辑</button>
+          <button class="table-btn" onclick="editPriceOverride(${jsArg(p.model)}, ${p.prompt_per_m}, ${p.completion_per_m}, ${p.cache_read_per_m}, ${p.cache_creation_per_m})">编辑</button>
           <button class="table-btn table-btn-danger" onclick="deletePriceOverride(${jsArg(p.model)})">重置</button>
         ` : `
-          <button class="table-btn" onclick="editPriceOverride(${jsArg(p.model)}, ${p.input_price}, ${p.output_price}, ${p.cache_read_price}, ${p.cache_creation_price})">自定义覆盖</button>
+          <button class="table-btn" onclick="editPriceOverride(${jsArg(p.model)}, ${p.prompt_per_m}, ${p.completion_per_m}, ${p.cache_read_per_m}, ${p.cache_creation_per_m})">自定义覆盖</button>
         `;
 
         return `
           <tr>
             <td class="font-mono"><strong>${esc(p.model)}</strong></td>
             <td>${srcBadge}</td>
-            <td class="num font-mono">$${p.input_price.toFixed(4)}</td>
-            <td class="num font-mono">$${p.output_price.toFixed(4)}</td>
-            <td class="num font-mono">$${p.cache_read_price ? p.cache_read_price.toFixed(4) : '0.0000'}</td>
-            <td class="num font-mono">$${p.cache_creation_price ? p.cache_creation_price.toFixed(4) : '0.0000'}</td>
+            <td class="num font-mono">$${p.prompt_per_m.toFixed(4)}</td>
+            <td class="num font-mono">$${p.completion_per_m.toFixed(4)}</td>
+            <td class="num font-mono">$${p.cache_read_per_m ? p.cache_read_per_m.toFixed(4) : '0.0000'}</td>
+            <td class="num font-mono">$${p.cache_creation_per_m ? p.cache_creation_per_m.toFixed(4) : '0.0000'}</td>
             <td style="font-size: 11.5px; color: var(--text-tertiary);">${p.updated_at ? new Date(p.updated_at).toLocaleString() : '—'}</td>
             <td style="text-align: center;">
               <div style="display: flex; gap: 4px; justify-content: center;">${actionsHtml}</div>

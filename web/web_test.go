@@ -72,9 +72,17 @@ func TestDashboardCache(t *testing.T) {
 	}
 }
 
-func TestDashboardPricingUsesAPIModelsField(t *testing.T) {
+func TestDashboardPricingUsesCurrentAPIFields(t *testing.T) {
 	doc := Dashboard(BootConfig{UnauthenticatedAPI: false})
-	if !bytes.Contains(doc, []byte("state.pricesData = (data && (data.models || data.prices)) || [];")) {
-		t.Fatal("dashboard must read the pricing API's models field")
+	checks := []string{
+		"state.pricesData = data.models || [];",
+		"p.prompt_per_m.toFixed(4)",
+		"p.completion_per_m.toFixed(4)",
+		"p.is_custom",
+	}
+	for _, check := range checks {
+		if !bytes.Contains(doc, []byte(check)) {
+			t.Errorf("dashboard is missing current pricing API field %q", check)
+		}
 	}
 }
