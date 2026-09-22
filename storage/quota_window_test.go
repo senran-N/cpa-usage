@@ -35,8 +35,11 @@ func TestEvaluateAccountQuotaUsesHeaderWindowMetadata(t *testing.T) {
 	if q.SummaryUsedPercent == nil || *q.SummaryUsedPercent != secondaryUsed {
 		t.Fatalf("summary used = %v, want %v", q.SummaryUsedPercent, secondaryUsed)
 	}
-	if q.SummaryRecoverAtMS != secondaryReset || q.CooldownRemainingSeconds != 3*24*60*60 {
-		t.Fatalf("summary reset/cooldown = %d/%d", q.SummaryRecoverAtMS, q.CooldownRemainingSeconds)
+	if q.SummaryRecoverAtMS != secondaryReset || q.ResetRemainingSeconds != 3*24*60*60 {
+		t.Fatalf("summary reset/countdown = %d/%d", q.SummaryRecoverAtMS, q.ResetRemainingSeconds)
+	}
+	if q.InCooldown || q.CooldownRemainingSeconds != 0 {
+		t.Fatalf("a window reset is not a cooldown: in_cooldown=%v cooldown=%d", q.InCooldown, q.CooldownRemainingSeconds)
 	}
 }
 
@@ -51,8 +54,8 @@ func TestEvaluateAccountQuotaSummaryTieUsesLaterReset(t *testing.T) {
 		HeaderSecondaryQuotaUsedPercent: &used,
 		HeaderSecondaryQuotaRecoverAtMS: secondaryReset,
 	}, now)
-	if q.SummaryRecoverAtMS != secondaryReset || q.CooldownRemainingSeconds != 7200 {
-		t.Fatalf("tie selection = %d/%d, want %d/7200", q.SummaryRecoverAtMS, q.CooldownRemainingSeconds, secondaryReset)
+	if q.SummaryRecoverAtMS != secondaryReset || q.ResetRemainingSeconds != 7200 {
+		t.Fatalf("tie selection = %d/%d, want %d/7200", q.SummaryRecoverAtMS, q.ResetRemainingSeconds, secondaryReset)
 	}
 }
 
@@ -140,7 +143,7 @@ func TestEvaluateAccountQuotaReachedFallbackUsesLatestExhaustedReset(t *testing.
 	if q.ReachedWindowKind != "weekly" || q.ReachedWindowSource != "secondary" {
 		t.Fatalf("reached window = %s/%s", q.ReachedWindowKind, q.ReachedWindowSource)
 	}
-	if q.SummaryRecoverAtMS != secondaryReset || q.CooldownRemainingSeconds != 3*60*60 {
-		t.Fatalf("reached reset/cooldown = %d/%d", q.SummaryRecoverAtMS, q.CooldownRemainingSeconds)
+	if q.SummaryRecoverAtMS != secondaryReset || q.ResetRemainingSeconds != 3*60*60 {
+		t.Fatalf("reached reset/countdown = %d/%d", q.SummaryRecoverAtMS, q.ResetRemainingSeconds)
 	}
 }

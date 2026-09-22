@@ -13,10 +13,11 @@ const (
 )
 
 type quotaObservation struct {
-	At         time.Time
-	Used       float64
-	ResetAtMS  int64
-	WindowKind string
+	At          time.Time
+	Used        float64
+	ResetAtMS   int64
+	WindowKind  string
+	TotalTokens int64
 }
 
 type accountQuotaObservations struct {
@@ -85,7 +86,17 @@ func buildQuotaForecast(window *AccountQuotaWindowDetail, observations []quotaOb
 		forecast.EstimatedExhaustionAtMS = now.UnixMilli()
 		return forecast
 	}
-	maxRate := 0.0
+	span := current[len(current)-1].At.Sub(current[0].At)
+	if span < quotaForecastMinSpacing {
+		// Not enough history to extrapolate anything.
+		return nil
+	}
+	maxRate := (current[len(current)-1].Used - current[0].Used) / span.Hours()
+	// Upstream reports used percent as a coarse integer step while sampling far
+	// more often than once a minute, so neighbouring samples almost never both
+	// clear the minimum spacing and show an increase. Keep the sustained span
+	// rate above as the baseline and raise it to the steepest burst actually
+	// observed.
 	for i := 1; i < len(current); i++ {
 		elapsed := current[i].At.Sub(current[i-1].At)
 		if elapsed < quotaForecastMinSpacing {
@@ -100,8 +111,11 @@ func buildQuotaForecast(window *AccountQuotaWindowDetail, observations []quotaOb
 			maxRate = rate
 		}
 	}
-	if maxRate <= 0 {
-		return nil
+	if maxRate <= 0 || math.IsNaN(maxRate) || math.IsInf(maxRate, 0) {
+		// Consumption is flat over the window: there is no trend to extrapolate.
+		// Report that explicitly instead of showing nothing at all.
+		forecast.Status = "stable"
+		return forecast
 	}
 
 	remaining := 100.0 - *window.UsedPercent
@@ -134,4 +148,56 @@ func isFinitePercent(value float64) bool {
 func sameQuotaReset(left, right int64) bool {
 	const toleranceMS = 5 * 60 * 1000
 	return left > 0 && right > 0 && math.Abs(float64(left-right)) <= toleranceMS
+}
+
+// applyWindowEstimates back-calculates an absolute allowance for one quota
+// window. Upstream only reports a usage percentage, so the total allowance is
+// inferred from the consumption this proxy recorded inside that window and the
+// percentage it reported. The result is an estimate, never an accounting
+// figure: it only covers requests that passed through here, and upstream may
+// weight model tiers differently.
+func applyWindowEstimates(window *AccountQuotaWindowDetail, observations []quotaObservation, now time.Time) {
+	if window == nil || len(observations) == 0 {
+		return
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+
+	var tokens int64
+	var requests int64
+	for _, observation := range observations {
+		if observation.WindowKind != window.WindowKind || observation.ResetAtMS <= 0 ||
+			!sameQuotaReset(observation.ResetAtMS, window.ResetAtMS) ||
+			observation.At.IsZero() || observation.At.After(now) {
+			continue
+		}
+		if observation.TotalTokens > 0 {
+			tokens += observation.TotalTokens
+		}
+		requests++
+	}
+	window.ConsumedTokens = tokens
+	window.ConsumedRequests = requests
+
+	used := window.UsedPercent
+	// A barely-moved percentage makes the back-calculation explode (one rounding
+	// step at 1% implies an allowance orders of magnitude above what was seen),
+	// so only publish an absolute estimate once the window has meaningfully moved
+	// and this proxy recorded real consumption in it.
+	if used == nil || !isFinitePercent(*used) || *used < 1.0 || *used > 100.0 || tokens <= 0 {
+		return
+	}
+	total := int64(math.Round(float64(tokens) / (*used / 100.0)))
+	remainingTokens := total - tokens
+	if remainingTokens < 0 {
+		remainingTokens = 0
+	}
+	remainingRequests := int64(math.Round(float64(requests) * (100.0 - *used) / *used))
+	if remainingRequests < 0 {
+		remainingRequests = 0
+	}
+	window.EstimatedTotalTokens = &total
+	window.EstimatedRemainingTokens = &remainingTokens
+	window.EstimatedRemainingRequests = &remainingRequests
 }

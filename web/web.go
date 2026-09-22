@@ -2,7 +2,9 @@ package web
 
 import (
 	"bytes"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"sync"
 )
@@ -26,6 +28,9 @@ type BootConfig struct {
 var (
 	bootCacheMu sync.RWMutex
 	bootCache   = map[BootConfig][]byte{}
+
+	etagCacheMu sync.RWMutex
+	etagCache   = map[BootConfig]string{}
 )
 
 // Dashboard returns the dashboard document with cfg injected.
@@ -50,4 +55,24 @@ func Dashboard(cfg BootConfig) []byte {
 	bootCache[cfg] = doc
 	bootCacheMu.Unlock()
 	return doc
+}
+
+// DashboardETag returns a strong validator for the rendered dashboard so the
+// caller can answer If-None-Match with 304 and skip transferring (and the
+// browser re-parsing) the ~250KB document on every refresh.
+func DashboardETag(cfg BootConfig) string {
+	etagCacheMu.RLock()
+	cached, ok := etagCache[cfg]
+	etagCacheMu.RUnlock()
+	if ok {
+		return cached
+	}
+
+	sum := sha256.Sum256(Dashboard(cfg))
+	etag := `"` + hex.EncodeToString(sum[:16]) + `"`
+
+	etagCacheMu.Lock()
+	etagCache[cfg] = etag
+	etagCacheMu.Unlock()
+	return etag
 }

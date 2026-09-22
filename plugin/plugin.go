@@ -310,7 +310,9 @@ func (p *Plugin) HandleUsage(payload []byte) ([]byte, error) {
 		MatchedModel:                      cost.MatchedModel,
 	}
 
-	// Asynchronously enqueue for batch writing
+	// Asynchronously enqueue for batch writing. The API read barrier flushes
+	// accepted records before rendering the dashboard, while the host request
+	// path remains non-blocking.
 	store.Ingest(storageRec)
 
 	return []byte("{}"), nil
@@ -409,13 +411,33 @@ func (p *Plugin) HandleManagement(payload []byte) ([]byte, error) {
 		cleanPath == "" ||
 		strings.HasSuffix(cleanPath, "/index.html") {
 
+		bootCfg := web.BootConfig{UnauthenticatedAPI: unauthenticated}
+		etag := web.DashboardETag(bootCfg)
+
+		// The document is ~250KB and identical until the plugin or its boot
+		// config changes. Answer conditional requests with 304 so refreshes
+		// skip the transfer and the browser's HTML/JS re-parse entirely.
+		if match := strings.TrimSpace(req.Headers.Get("If-None-Match")); match == etag {
+			resp := pluginapi.ManagementResponse{
+				StatusCode: http.StatusNotModified,
+				Headers: http.Header{
+					"Etag":          []string{etag},
+					"Cache-Control": []string{"no-cache, must-revalidate"},
+				},
+			}
+			return json.Marshal(resp)
+		}
+
 		resp := pluginapi.ManagementResponse{
 			StatusCode: http.StatusOK,
 			Headers: http.Header{
-				"Content-Type":  []string{"text/html; charset=utf-8"},
-				"Cache-Control": []string{"no-cache, no-store, must-revalidate"},
+				"Content-Type": []string{"text/html; charset=utf-8"},
+				// no-cache (not no-store) lets the browser keep the copy so a
+				// conditional request can be made cheap; revalidation is a 304.
+				"Cache-Control": []string{"no-cache, must-revalidate"},
+				"Etag":          []string{etag},
 			},
-			Body: web.Dashboard(web.BootConfig{UnauthenticatedAPI: unauthenticated}),
+			Body: web.Dashboard(bootCfg),
 		}
 		return json.Marshal(resp)
 	}

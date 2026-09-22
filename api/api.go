@@ -90,6 +90,13 @@ func (h *Handler) Handle(method, path string, query url.Values, body []byte) Res
 		return ErrorResponse(http.StatusServiceUnavailable, "database_unavailable", "database is not initialized")
 	}
 
+	// Usage is ingested asynchronously to keep the host request path fast. A
+	// read barrier makes completed requests immediately visible to the dashboard
+	// instead of making users wait for the periodic batch flush.
+	if err := h.store.Flush(); err != nil {
+		return ErrorResponse(http.StatusServiceUnavailable, "database_unavailable", err.Error())
+	}
+
 	method = strings.ToUpper(strings.TrimSpace(method))
 	cleanPath := strings.TrimRight(strings.TrimSpace(path), "/")
 
@@ -195,7 +202,7 @@ func parseTimeParam(val string) *time.Time {
 func parseQueryFilter(query url.Values) storage.QueryFilter {
 	filter := storage.QueryFilter{
 		StartTime: parseTimeParam(query.Get("start_time")),
-		EndTime:   parseTimeParam(query.Get("end_time")),
+		EndTime:   parseEndTimeParam(query.Get("end_time")),
 		APIKey:    strings.TrimSpace(query.Get("api_key")),
 		Model:     strings.TrimSpace(query.Get("model")),
 		Provider:  strings.TrimSpace(query.Get("provider")),
@@ -211,6 +218,20 @@ func parseQueryFilter(query url.Values) storage.QueryFilter {
 		filter.ModelMismatch = &mismatch
 	}
 	return filter
+}
+
+// parseEndTimeParam treats a date-only end_time as the end of that local UTC
+// day. Without this, selecting a date range ending on 2026-03-30 silently
+// excluded every record after 00:00:00 on that date.
+func parseEndTimeParam(val string) *time.Time {
+	trimmed := strings.TrimSpace(val)
+	if len(trimmed) == len("2006-01-02") {
+		if t, err := time.Parse("2006-01-02", trimmed); err == nil {
+			end := t.UTC().Add(24*time.Hour - time.Nanosecond)
+			return &end
+		}
+	}
+	return parseTimeParam(trimmed)
 }
 
 func (h *Handler) handleSummary(query url.Values) Response {

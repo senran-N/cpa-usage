@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+
+	"cpa-usage/web"
 )
 
 func TestPluginLifecycle(t *testing.T) {
@@ -299,4 +301,37 @@ func TestDashboardCarriesBootConfig(t *testing.T) {
 	}
 
 	registerWithConfig(t, "retention_days: 30\n")
+}
+
+func TestDashboardETagConditionalRequest(t *testing.T) {
+	p := Instance()
+	p.mu.RLock()
+	unauthenticated := p.config.UnauthenticatedAPI
+	p.mu.RUnlock()
+
+	etag := web.DashboardETag(web.BootConfig{UnauthenticatedAPI: unauthenticated})
+
+	// A conditional request carrying the current ETag must get 304 and no body.
+	req, _ := json.Marshal(pluginapi.ManagementRequest{
+		Method:  http.MethodGet,
+		Path:    "/dashboard",
+		Headers: http.Header{"If-None-Match": []string{etag}},
+	})
+	raw, err := p.HandleManagement(req)
+	if err != nil {
+		t.Fatalf("conditional request failed: %v", err)
+	}
+	var resp pluginapi.ManagementResponse
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotModified {
+		t.Fatalf("expected 304, got %d", resp.StatusCode)
+	}
+	if len(resp.Body) != 0 {
+		t.Fatalf("304 response must not carry a body, got %d bytes", len(resp.Body))
+	}
+	if resp.Headers.Get("ETag") != etag {
+		t.Fatalf("304 response must echo the ETag, got %q", resp.Headers.Get("ETag"))
+	}
 }

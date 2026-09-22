@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -13,12 +14,36 @@ import (
 
 // Storage provides SQLite persistence and aggregation for usage records.
 type Storage struct {
-	db         *sql.DB
-	queue      chan *Record
-	stopWorker chan struct{}
-	workerWg   sync.WaitGroup
-	closed     bool
-	closeLock  sync.Mutex
+	db            *sql.DB
+	queue         chan *Record
+	flushRequests chan chan struct{}
+	stopWorker    chan struct{}
+	workerWg      sync.WaitGroup
+	pendingMu     sync.Mutex
+	pendingCond   *sync.Cond
+	pendingWrites int
+	closed        bool
+	// closeLock is an RWMutex: concurrent Ingest calls on the request path and
+	// read-path Flush barriers only need to exclude Close, never each other.
+	// A plain Mutex made every dashboard read serialize against the ingest
+	// hot path, which is what made reads stall under write load.
+	closeLock sync.RWMutex
+
+	// unflushed tracks records accepted by Ingest but not yet committed to
+	// the database. When it is zero a Flush can return immediately instead
+	// of paying a worker round-trip on every API read.
+	unflushed atomic.Int64
+
+	// flushMu serializes Flush slow paths so concurrent readers share one
+	// flush barrier instead of queueing one barrier per request.
+	flushMu sync.Mutex
+
+	// filterOpts caches the DISTINCT dropdown values used by the dashboard
+	// filter bar. The values drift slowly and computing them costs four
+	// scans, so they are reused for a short TTL.
+	filterOptsMu       sync.Mutex
+	filterOptsCached   *FilterOptions
+	filterOptsCachedAt time.Time
 }
 
 const (
@@ -67,8 +92,12 @@ func ClampExportLimit(limit int) int {
 
 // Open initializes or connects to the SQLite database at dbPath.
 func Open(dbPath string) (*Storage, error) {
-	// Enable WAL mode, busy timeout and normal synchronous mode via DSN
-	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)", dbPath)
+	// Enable WAL mode, busy timeout and normal synchronous mode via DSN.
+	// The cache/mmap pragmas keep hot index pages in memory so the aggregate
+	// dashboard queries do not hit disk on every refresh; analysis_limit
+	// bounds how expensive PRAGMA optimize is allowed to be.
+	dsn := fmt.Sprintf("%s?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)"+
+		"&_pragma=cache_size(-16384)&_pragma=mmap_size(268435456)&_pragma=temp_store(memory)&_pragma=analysis_limit(400)", dbPath)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open sqlite database: %w", err)
@@ -80,10 +109,12 @@ func Open(dbPath string) (*Storage, error) {
 	db.SetConnMaxLifetime(time.Hour)
 
 	s := &Storage{
-		db:         db,
-		queue:      make(chan *Record, defaultQueueSize),
-		stopWorker: make(chan struct{}),
+		db:            db,
+		queue:         make(chan *Record, defaultQueueSize),
+		flushRequests: make(chan chan struct{}),
+		stopWorker:    make(chan struct{}),
 	}
+	s.pendingCond = sync.NewCond(&s.pendingMu)
 
 	if err := s.initSchema(); err != nil {
 		db.Close()
@@ -157,6 +188,13 @@ func (s *Storage) initSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_usage_auth_id ON usage_records(auth_id);
 	CREATE INDEX IF NOT EXISTS idx_usage_provider ON usage_records(provider);
 	CREATE INDEX IF NOT EXISTS idx_usage_failed ON usage_records(failed);
+	-- Composite indexes let filtered aggregation queries walk the index
+	-- instead of scanning the whole time window or the full table.
+	CREATE INDEX IF NOT EXISTS idx_usage_model_time ON usage_records(model, requested_at_unix);
+	CREATE INDEX IF NOT EXISTS idx_usage_api_key_time ON usage_records(api_key, requested_at_unix);
+	CREATE INDEX IF NOT EXISTS idx_usage_auth_id_time ON usage_records(auth_id, requested_at_unix);
+	CREATE INDEX IF NOT EXISTS idx_usage_provider_time ON usage_records(provider, requested_at_unix);
+	CREATE INDEX IF NOT EXISTS idx_usage_failed_time ON usage_records(failed, requested_at_unix);
 
 	CREATE TABLE IF NOT EXISTS custom_prices (
 		model TEXT PRIMARY KEY,
@@ -243,20 +281,52 @@ func (s *Storage) Ingest(r *Record) {
 	if r == nil {
 		return
 	}
-	s.closeLock.Lock()
-	defer s.closeLock.Unlock()
+	s.closeLock.RLock()
+	defer s.closeLock.RUnlock()
 	if s.closed {
 		return
 	}
 
+	// Count the record as unflushed before publishing it so a Flush that
+	// observes the record in the queue also observes the pending count.
+	s.unflushed.Add(1)
+
 	select {
 	case s.queue <- r:
 	default:
-		// Queue full, insert directly in a goroutine to avoid dropping data or blocking caller
+		// Preserve the non-blocking ingest contract without allowing an overflow
+		// writer to outlive Close. The pending counter lets shutdown and Flush
+		// drain these writes before the database handle is closed. A counter plus
+		// condition variable is used instead of sync.WaitGroup because Ingest can
+		// add work while a reader is waiting, which WaitGroup reports as misuse and
+		// panics on.
+		s.trackPending(1)
 		go func(rec *Record) {
+			defer s.trackPending(-1)
+			defer s.unflushed.Add(-1)
 			_ = s.InsertRecord(rec)
 		}(r)
 	}
+}
+
+// trackPending adjusts the number of overflow writes currently in flight and
+// wakes waiters once the count returns to zero.
+func (s *Storage) trackPending(delta int) {
+	s.pendingMu.Lock()
+	s.pendingWrites += delta
+	if s.pendingWrites <= 0 {
+		s.pendingCond.Broadcast()
+	}
+	s.pendingMu.Unlock()
+}
+
+// waitPending blocks until every overflow write has finished.
+func (s *Storage) waitPending() {
+	s.pendingMu.Lock()
+	for s.pendingWrites > 0 {
+		s.pendingCond.Wait()
+	}
+	s.pendingMu.Unlock()
 }
 
 func (s *Storage) flushWorker() {
@@ -271,31 +341,51 @@ func (s *Storage) flushWorker() {
 		if len(batch) == 0 {
 			return
 		}
+		n := len(batch)
 		_ = s.BatchInsertRecords(batch)
 		batch = make([]*Record, 0, batchFlushSize)
+		// Whether the insert succeeded or failed, the batch is done: durable
+		// or dropped. Keep the counter honest so Flush's fast path never
+		// waits on records that have already been handled.
+		s.unflushed.Add(-int64(n))
+	}
+
+	// drainQueue moves everything already accepted by Ingest into the batch.
+	// The flush barrier depends on this: without it a record sitting in the
+	// queue could be skipped while the barrier reported it as written.
+	drainQueue := func() {
+		for {
+			select {
+			case r := <-s.queue:
+				batch = append(batch, r)
+				if len(batch) >= batchFlushSize {
+					flush()
+				}
+			default:
+				return
+			}
+		}
 	}
 
 	for {
 		select {
 		case <-s.stopWorker:
 			// Drain remaining records in queue
-			for {
-				select {
-				case r := <-s.queue:
-					batch = append(batch, r)
-					if len(batch) >= batchFlushSize {
-						flush()
-					}
-				default:
-					flush()
-					return
-				}
-			}
+			drainQueue()
+			flush()
+			return
 		case r := <-s.queue:
 			batch = append(batch, r)
 			if len(batch) >= batchFlushSize {
 				flush()
 			}
+		case ack := <-s.flushRequests:
+			// The barrier must cover records still waiting in the queue, not only
+			// those already copied into the current batch. select may pick this
+			// case while the queue still holds the record the caller just ingested.
+			drainQueue()
+			flush()
+			close(ack)
 		case <-ticker.C:
 			flush()
 		}
@@ -314,8 +404,50 @@ func (s *Storage) Close() error {
 
 	close(s.stopWorker)
 	s.workerWg.Wait()
+	// Overflow writes are intentionally asynchronous during ingest, but they
+	// must finish before SQLite is closed or records can be lost/corrupted.
+	s.waitPending()
+
+	// Refresh table statistics once at shutdown so the query planner starts
+	// the next session with good data. Cheap relative to the lifetime cost
+	// of misplanned aggregate queries.
+	_, _ = s.db.Exec("PRAGMA optimize")
 
 	return s.db.Close()
+}
+
+// Flush waits until all records already accepted by Ingest have been written.
+// Read APIs use this barrier so a newly completed request becomes visible to
+// the dashboard without waiting for the periodic batch timer.
+func (s *Storage) Flush() error {
+	// Fast path: everything accepted so far is already durable, so a worker
+	// round-trip could not make anything else visible. This is what keeps
+	// the per-request read barrier cheap on the API path.
+	if s.unflushed.Load() == 0 {
+		return nil
+	}
+
+	// Serialize flushes so a burst of dashboard reads shares one barrier
+	// instead of queueing one barrier per request.
+	s.flushMu.Lock()
+	defer s.flushMu.Unlock()
+
+	// A previous flush may have drained the queue while we waited on flushMu.
+	if s.unflushed.Load() == 0 {
+		return nil
+	}
+
+	s.closeLock.RLock()
+	defer s.closeLock.RUnlock()
+	if s.closed {
+		return fmt.Errorf("storage is closed")
+	}
+	// Overflow inserts do not pass through the worker barrier.
+	s.waitPending()
+	ack := make(chan struct{})
+	s.flushRequests <- ack
+	<-ack
+	return nil
 }
 
 // InsertRecord synchronously writes a single record into the database.
@@ -518,17 +650,26 @@ func (s *Storage) GetSummary(filter QueryFilter) (*SummaryStats, error) {
 func (s *Storage) GetTimeSeries(filter QueryFilter, interval string) ([]*TimeSeriesPoint, error) {
 	where, args := buildWhereClause(filter)
 
-	format := "%Y-%m-%d %H:00"
+	// Bucket on the indexed requested_at_unix column using integer division
+	// instead of parsing the text timestamp with strftime on every row. The
+	// buckets are identical because requested_at is stored in UTC.
+	var bucketSec int64
+	var tsFormat string
 	switch interval {
 	case "day":
-		format = "%Y-%m-%d"
+		bucketSec = 86400
+		tsFormat = "2006-01-02"
 	case "minute":
-		format = "%Y-%m-%d %H:%M"
+		bucketSec = 60
+		tsFormat = "2006-01-02 15:04"
+	default:
+		bucketSec = 3600
+		tsFormat = "2006-01-02 15:00"
 	}
 
-	query := fmt.Sprintf(`
+	query := `
 		SELECT
-			strftime('%s', requested_at) AS bucket,
+			requested_at_unix / ? AS bucket,
 			COUNT(*),
 			COALESCE(SUM(CASE WHEN failed = 0 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN failed = 1 THEN 1 ELSE 0 END), 0),
@@ -536,12 +677,16 @@ func (s *Storage) GetTimeSeries(filter QueryFilter, interval string) ([]*TimeSer
 			COALESCE(SUM(total_cost), 0.0),
 			COALESCE(AVG(latency_ms), 0.0)
 		FROM usage_records
-		%s
+		` + where + `
 		GROUP BY bucket
 		ORDER BY bucket ASC
-	`, format, where)
+	`
 
-	rows, err := s.db.Query(query, args...)
+	queryArgs := make([]interface{}, 0, len(args)+1)
+	queryArgs = append(queryArgs, bucketSec)
+	queryArgs = append(queryArgs, args...)
+
+	rows, err := s.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query time series: %w", err)
 	}
@@ -549,9 +694,10 @@ func (s *Storage) GetTimeSeries(filter QueryFilter, interval string) ([]*TimeSer
 
 	var points []*TimeSeriesPoint
 	for rows.Next() {
+		var bucket int64
 		p := &TimeSeriesPoint{}
 		if err := rows.Scan(
-			&p.Timestamp,
+			&bucket,
 			&p.Requests,
 			&p.SuccessCount,
 			&p.FailedCount,
@@ -561,6 +707,7 @@ func (s *Storage) GetTimeSeries(filter QueryFilter, interval string) ([]*TimeSer
 		); err != nil {
 			return nil, err
 		}
+		p.Timestamp = time.Unix(bucket*bucketSec, 0).UTC().Format(tsFormat)
 		points = append(points, p)
 	}
 	return points, rows.Err()
@@ -983,8 +1130,34 @@ func (s *Storage) LoadSyncedPrices() ([]SyncedPriceRecord, error) {
 	return records, rows.Err()
 }
 
+// filterOptionsTTL bounds how long the distinct dropdown values are reused.
+// The dashboard reloads these whenever the page opens, but the values drift
+// slowly; a short TTL collapses repeated loads into one set of scans while
+// keeping newly ingested values visible within half a minute.
+const filterOptionsTTL = 30 * time.Second
+
+// invalidateFilterOptions drops the cached dropdown values. Paths that
+// bulk-change the table outside the normal ingest pipeline call it so the
+// next load reflects the new data immediately.
+func (s *Storage) invalidateFilterOptions() {
+	s.filterOptsMu.Lock()
+	s.filterOptsCached = nil
+	s.filterOptsCachedAt = time.Time{}
+	s.filterOptsMu.Unlock()
+}
+
 // GetFilterOptions retrieves distinct filter dropdown choices.
 func (s *Storage) GetFilterOptions() (*FilterOptions, error) {
+	// Serializing the whole lookup is intentional: it deduplicates concurrent
+	// callers onto one set of scans and a caller that waited still gets a
+	// fresh entry computed after its own wait began.
+	s.filterOptsMu.Lock()
+	defer s.filterOptsMu.Unlock()
+
+	if s.filterOptsCached != nil && time.Since(s.filterOptsCachedAt) < filterOptionsTTL {
+		return s.filterOptsCached, nil
+	}
+
 	opts := &FilterOptions{
 		Models:    make([]string, 0),
 		Providers: make([]string, 0),
@@ -1040,6 +1213,8 @@ func (s *Storage) GetFilterOptions() (*FilterOptions, error) {
 		}
 	}
 
+	s.filterOptsCached = opts
+	s.filterOptsCachedAt = time.Now()
 	return opts, nil
 }
 
@@ -1049,6 +1224,7 @@ func (s *Storage) ClearAll() (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	s.invalidateFilterOptions()
 	return res.RowsAffected()
 }
 
@@ -1058,6 +1234,7 @@ func (s *Storage) Cleanup(before time.Time) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	s.invalidateFilterOptions()
 	return res.RowsAffected()
 }
 
@@ -1460,6 +1637,10 @@ func (s *Storage) ImportRecords(records []*Record) (int, int, error) {
 
 	if err := tx.Commit(); err != nil {
 		return 0, 0, fmt.Errorf("failed to commit import tx: %w", err)
+	}
+
+	if imported > 0 {
+		s.invalidateFilterOptions()
 	}
 
 	return imported, skipped, nil

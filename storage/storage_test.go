@@ -3,9 +3,31 @@ package storage
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
+
+func TestFlushMakesQueuedRecordsImmediatelyReadable(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := Open(filepath.Join(tempDir, "flush.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	store.Ingest(&Record{Provider: "openai", Model: "gpt-4o", RequestedAt: time.Now(), Generate: true})
+	if err := store.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	stats, err := store.GetSummary(QueryFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.TotalRequests != 1 {
+		t.Fatalf("total requests = %d, want 1", stats.TotalRequests)
+	}
+}
 
 func TestStorageLifecycle(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "cpa-usage-test-*")
@@ -478,5 +500,177 @@ func TestDetectModelMismatch(t *testing.T) {
 		if got != c.expected {
 			t.Errorf("DetectModelMismatch(%q, %q, %q) = %v; want %v", c.requested, c.resolved, c.response, got, c.expected)
 		}
+	}
+}
+
+func TestFlushFastPathWhenIdle(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := Open(filepath.Join(tempDir, "idle.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	// Flush on a store with nothing pending must return immediately without
+	// hitting the worker, and repeated calls must stay cheap.
+	for i := 0; i < 100; i++ {
+		if err := store.Flush(); err != nil {
+			t.Fatalf("idle flush %d failed: %v", i, err)
+		}
+	}
+	if got := store.unflushed.Load(); got != 0 {
+		t.Fatalf("unflushed = %d, want 0", got)
+	}
+}
+
+func TestFlushUnflushedCounterConsistency(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := Open(filepath.Join(tempDir, "counter.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	const n = 250 // > batchFlushSize so several commits happen
+	for i := 0; i < n; i++ {
+		store.Ingest(&Record{Provider: "openai", Model: "gpt-4o", RequestedAt: time.Now()})
+	}
+	if got := store.unflushed.Load(); got != int64(n) {
+		t.Fatalf("unflushed = %d, want %d", got, n)
+	}
+	if err := store.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if got := store.unflushed.Load(); got != 0 {
+		t.Fatalf("unflushed after flush = %d, want 0", got)
+	}
+
+	// Concurrent flushers must not corrupt the counter or lose visibility.
+	for i := 0; i < n; i++ {
+		store.Ingest(&Record{Provider: "openai", Model: "gpt-4o", RequestedAt: time.Now()})
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := store.Flush(); err != nil {
+				t.Errorf("concurrent flush: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if got := store.unflushed.Load(); got != 0 {
+		t.Fatalf("unflushed after concurrent flushes = %d, want 0", got)
+	}
+	stats, err := store.GetSummary(QueryFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.TotalRequests != int64(2*n) {
+		t.Fatalf("total requests = %d, want %d", stats.TotalRequests, 2*n)
+	}
+}
+
+func TestGetTimeSeriesBucketFormats(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := Open(filepath.Join(tempDir, "ts.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	// Fixed UTC times so the expected bucket strings are exact.
+	base := time.Date(2026, 3, 30, 14, 23, 45, 0, time.UTC)
+	for _, delta := range []time.Duration{0, -30 * time.Minute, -25 * time.Hour} {
+		if err := store.InsertRecord(&Record{Provider: "openai", Model: "gpt-4o", RequestedAt: base.Add(delta)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	hourPts, err := store.GetTimeSeries(QueryFilter{}, "hour")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 14:00 bucket and 13:00 bucket (yesterday 13:00 for -25h => 2026-03-29 13:00)
+	if len(hourPts) != 3 {
+		t.Fatalf("hour buckets = %d, want 3: %+v", len(hourPts), hourPts)
+	}
+	if hourPts[0].Timestamp != "2026-03-29 13:00" || hourPts[1].Timestamp != "2026-03-30 13:00" || hourPts[2].Timestamp != "2026-03-30 14:00" {
+		t.Fatalf("hour timestamps = %v/%v/%v", hourPts[0].Timestamp, hourPts[1].Timestamp, hourPts[2].Timestamp)
+	}
+	if hourPts[2].Requests != 1 {
+		t.Fatalf("14:00 bucket requests = %d, want 1", hourPts[2].Requests)
+	}
+
+	dayPts, err := store.GetTimeSeries(QueryFilter{}, "day")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(dayPts) != 2 || dayPts[0].Timestamp != "2026-03-29" || dayPts[1].Timestamp != "2026-03-30" {
+		t.Fatalf("day buckets = %+v", dayPts)
+	}
+
+	minPts, err := store.GetTimeSeries(QueryFilter{}, "minute")
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, p := range minPts {
+		if p.Timestamp == "2026-03-30 14:23" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("minute buckets missing 14:23: %+v", minPts)
+	}
+}
+
+func TestGetFilterOptionsCachedAndInvalidated(t *testing.T) {
+	tempDir := t.TempDir()
+	store, err := Open(filepath.Join(tempDir, "fo.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+
+	if err := store.InsertRecord(&Record{Provider: "openai", Model: "gpt-4o", APIKey: "k1", AuthID: "a1", RequestedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+
+	opts1, err := store.GetFilterOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(opts1.Models) != 1 || opts1.Models[0] != "gpt-4o" {
+		t.Fatalf("models = %v", opts1.Models)
+	}
+
+	// Second call must hit the cache and return the identical slice content.
+	opts2, err := store.GetFilterOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(opts2.Models) != 1 || opts2.Models[0] != "gpt-4o" {
+		t.Fatalf("cached models = %v", opts2.Models)
+	}
+	if store.filterOptsCached == nil {
+		t.Fatal("expected cache to be populated")
+	}
+
+	// A write within the TTL does not invalidate (TTL-based freshness), but a
+	// bulk delete must.
+	if err := store.InsertRecord(&Record{Provider: "anthropic", Model: "claude-3", RequestedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ClearAll(); err != nil {
+		t.Fatal(err)
+	}
+	opts3, err := store.GetFilterOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(opts3.Models) != 0 {
+		t.Fatalf("models after clear = %v", opts3.Models)
 	}
 }

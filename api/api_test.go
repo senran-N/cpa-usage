@@ -16,6 +16,20 @@ import (
 	"cpa-usage/storage"
 )
 
+func TestEndTimeDateOnlyIncludesWholeDay(t *testing.T) {
+	sameDay, err := time.Parse(time.RFC3339, "2026-03-30T12:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parsed := parseEndTimeParam("2026-03-30")
+	if parsed == nil || !parsed.Equal(time.Date(2026, 3, 30, 23, 59, 59, 999999999, time.UTC)) {
+		t.Fatalf("end time = %v, want end of day", parsed)
+	}
+	if parsed.Before(sameDay) {
+		t.Fatalf("date-only end time %v excluded a same-day record", parsed)
+	}
+}
+
 func TestAPIEndpoints(t *testing.T) {
 	tempDir, err := os.MkdirTemp("", "cpa-usage-api-test-*")
 	if err != nil {

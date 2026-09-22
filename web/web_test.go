@@ -91,3 +91,18 @@ func TestDashboardPricingUsesCurrentAPIFields(t *testing.T) {
 		}
 	}
 }
+
+func TestDashboardETag(t *testing.T) {
+	cfg := BootConfig{UnauthenticatedAPI: false}
+	etag := DashboardETag(cfg)
+	if len(etag) < 4 || etag[0] != '"' || etag[len(etag)-1] != '"' {
+		t.Fatalf("etag %q is not a quoted token", etag)
+	}
+	if DashboardETag(cfg) != etag {
+		t.Fatal("etag must be stable for the same boot config")
+	}
+	other := DashboardETag(BootConfig{UnauthenticatedAPI: true})
+	if other == etag {
+		t.Fatal("etag must differ when the boot config changes")
+	}
+}

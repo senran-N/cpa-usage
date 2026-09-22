@@ -1049,6 +1049,18 @@
       letter-spacing: -0.02em;
       margin-top: 2px;
     }
+    .data-status {
+      color: var(--text-tertiary);
+      font-size: 11px;
+      white-space: nowrap;
+      min-width: 5em;
+      text-align: right;
+    }
+    .data-status.busy { color: var(--primary-color); }
+    .data-status.error { color: var(--error-color); }
+    #btnRefresh.is-loading svg { animation: cpa-spin .8s linear infinite; }
+    #btnRefresh:disabled { opacity: .65; cursor: wait; }
+    @keyframes cpa-spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
@@ -1066,6 +1078,7 @@
           <button class="segment-btn" data-range="30d">30 天</button>
           <button class="segment-btn" data-range="all">全部</button>
         </div>
+        <span id="dataStatus" class="data-status" role="status" aria-live="polite">准备就绪</span>
         <button id="btnRefresh" class="action-btn" title="刷新数据">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
           刷新
@@ -1349,8 +1362,8 @@
                 <th class="sortable" onclick="handleSort('auths', 'auth_id')">认证账号 <span id="sort-auths-auth_id" class="sort-arrow"></span></th>
                 <th class="sortable" onclick="handleSort('auths', 'provider')">AI 提供商 <span id="sort-auths-provider" class="sort-arrow"></span></th>
                 <th>状态与健康度</th>
-                <th>5小时配额</th>
-                <th>周配额</th>
+                <th title="上游仅提供使用百分比与重置时间；预估额度按本代理记录的窗口内消耗反推，为估算值">5小时配额 <span style="color:var(--text-tertiary); font-weight:400;">（预估）</span></th>
+                <th title="上游仅提供使用百分比与重置时间；预估额度按本代理记录的窗口内消耗反推，为估算值">周配额 <span style="color:var(--text-tertiary); font-weight:400;">（预估）</span></th>
                 <th class="num sortable" onclick="handleSort('auths', 'requests')">请求次数 <span id="sort-auths-requests" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('auths', 'failed_count')">失败次数 <span id="sort-auths-failed_count" class="sort-arrow"></span></th>
                 <th class="num sortable" onclick="handleSort('auths', 'total_tokens')">总 Token <span id="sort-auths-total_tokens" class="sort-arrow"></span></th>
@@ -1796,7 +1809,14 @@
       keysData: [],
       integrityPage: 1,
       integrityTotal: 0,
-      integrityRecords: []
+      integrityRecords: [],
+      timer: null,
+      loading: false,
+      reloadPending: false,
+      requestSeq: 0,
+      lastUpdatedAt: null,
+      cachedOptions: null,
+      interval: 'hour'
     };
 
     let currentLang = 'zh-CN';
@@ -2537,7 +2557,7 @@
       switchToTab('tab-overview');
     };
 
-    function switchToTab(tabId) {
+    async function switchToTab(tabId) {
       document.querySelectorAll('.tab-item').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
       const btn = document.querySelector(`.tab-item[data-tab="${tabId}"]`);
@@ -2572,6 +2592,20 @@
       constructor(msg) { super(msg || 'authentication required'); this.name = 'AuthRequired'; }
     }
 
+    function setDataStatus(kind, message) {
+      const el = document.getElementById('dataStatus');
+      if (!el) return;
+      el.className = 'data-status ' + (kind || '');
+      el.textContent = message || '';
+    }
+
+    function setRefreshBusy(busy) {
+      const btn = document.getElementById('btnRefresh');
+      if (!btn) return;
+      btn.disabled = !!busy;
+      btn.classList.toggle('is-loading', !!busy);
+    }
+
     async function fetchJSON(url, opts) {
       const options = Object.assign({}, opts);
       if (NEEDS_KEY) {
@@ -2594,6 +2628,8 @@
       }
 
       if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + (await res.text()));
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('json')) throw new Error('服务返回了无效的数据格式');
       return await res.json();
     }
 
@@ -2851,8 +2887,16 @@
       renderAuthsTable();
     };
 
+    function formatCountdown(seconds) {
+      if (!seconds || seconds <= 0) return '';
+      const m = Math.ceil(seconds / 60);
+      return m > 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`;
+    }
+
     function formatQuotaForecast(forecast) {
-      if (!forecast) return '';
+      if (!forecast) {
+        return '<div style="font-size: 10.5px; color: var(--text-tertiary);">暂无足够观测</div>';
+      }
       if (forecast.status === 'available' && forecast.estimated_exhaustion_after_seconds > 0) {
         const seconds = forecast.estimated_exhaustion_after_seconds;
         let text;
@@ -2863,15 +2907,50 @@
         } else {
           text = `${Math.ceil(seconds / 60)}分钟`;
         }
-        return `<div style="font-size: 10.5px; color: var(--text-secondary);" title="基于 ${forecast.sample_count || 0} 个配额观测，最高消耗速率 ${Number(forecast.burn_rate_percent_per_hour || 0).toFixed(1)}%/小时">预计 ${esc(text)} 后耗尽</div>`;
+        return `<div style="font-size: 10.5px; color: var(--warning-color);" title="基于 ${forecast.sample_count || 0} 个配额观测，消耗速率 ${Number(forecast.burn_rate_percent_per_hour || 0).toFixed(1)}%/小时">预计 ${esc(text)} 后耗尽</div>`;
       }
       if (forecast.status === 'exhausted') {
         return '<div style="font-size: 10.5px; color: var(--error-color);">已耗尽</div>';
       }
-      if (forecast.status === 'after_reset') {
-        return '<div style="font-size: 10.5px; color: var(--text-tertiary);">预计将在重置后耗尽</div>';
+      if (forecast.status === 'stable') {
+        return `<div style="font-size: 10.5px; color: var(--success-color);" title="基于 ${forecast.sample_count || 0} 个配额观测，未见明显消耗">暂无耗尽风险</div>`;
       }
-      return '<div style="font-size: 10.5px; color: var(--text-tertiary);">暂无足够历史</div>';
+      if (forecast.status === 'after_reset') {
+        return '<div style="font-size: 10.5px; color: var(--text-tertiary);">按当前速率将在重置后耗尽</div>';
+      }
+      return '<div style="font-size: 10.5px; color: var(--text-tertiary);">暂无足够观测</div>';
+    }
+
+    // 单个配额窗口的展示：已用/剩余百分比 + 预估额度 + 重置倒计时 + 预计耗尽。
+    // 5小时与周窗口各调一次，因此两列展示各自独立的预估值。
+    function renderQuotaWindow(win) {
+      const empty = '<span style="color:var(--text-tertiary);">—</span>';
+      if (!win || win.used_percent === null || win.used_percent === undefined) return empty;
+      const used = win.used_percent;
+      let colorClass = 'progress-fill-emerald';
+      if (used >= 90) colorClass = 'progress-fill-red';
+      else if (used >= 75) colorClass = 'progress-fill-amber';
+      else if (used >= 50) colorClass = 'progress-fill-yellow';
+
+      let estimateHtml = '';
+      if (win.estimated_remaining_tokens !== null && win.estimated_remaining_tokens !== undefined) {
+        const basis = `预估口径：本窗口经本代理的 ${win.consumed_requests || 0} 次请求共 ${formatNumber(win.consumed_tokens || 0)} tokens，按已用 ${used.toFixed(1)}% 反推总额度 ≈ ${formatNumber(win.estimated_total_tokens)} tokens。上游只给百分比且可能按模型分档加权，此处仅为估算值`;
+        const reqPart = win.estimated_remaining_requests > 0 ? ` / 约 ${formatNumber(win.estimated_remaining_requests)} 次` : '';
+        estimateHtml = `<div style="font-size: 10.5px; color: var(--text-secondary);" title="${esc(basis)}">预估剩余 ≈ ${formatNumber(win.estimated_remaining_tokens)} tokens${reqPart}</div>`;
+      }
+
+      const resetText = formatCountdown(win.reset_after_sec);
+      const resetHtml = resetText
+        ? `<div style="font-size: 10.5px; color: var(--text-tertiary);">${resetText} 后重置窗口</div>`
+        : '';
+
+      return `
+        <div style="font-size: 11.5px; font-family: var(--font-mono);">已用 ${used.toFixed(1)}%<span style="color:var(--text-tertiary); font-family: var(--font-sans);"> · 剩余 ${(100 - used).toFixed(1)}%</span></div>
+        <div class="progress-track"><div class="progress-fill ${colorClass}" style="width: ${Math.min(used, 100)}%;"></div></div>
+        ${estimateHtml}
+        ${resetHtml}
+        ${formatQuotaForecast(win.forecast)}
+      `;
     }
 
     function renderAuthsTable() {
@@ -2924,8 +3003,8 @@
           statusBadge = `<span class="badge badge-reauth" title="${esc(a.status_reason)}">需重登</span>`;
         } else if (a.status === 'cooldown' || a.in_cooldown) {
           const remMin = Math.ceil(a.cooldown_sec / 60);
-          const timeText = remMin > 60 ? `${Math.floor(remMin / 60)}h ${remMin % 60}m` : `${remMin}m`;
-          statusBadge = `<span class="badge badge-warning" title="${esc(a.status_reason)}">冷却 (${timeText})</span>`;
+          const timeText = a.cooldown_sec > 0 ? (remMin > 60 ? `${Math.floor(remMin / 60)}h ${remMin % 60}m` : `${remMin}m`) : '恢复时间未知';
+          statusBadge = `<span class="badge badge-warning" title="${esc(a.status_reason)}">限流冷却 (${timeText})</span>`;
         } else if (a.status === 'exhausted') {
           statusBadge = `<span class="badge badge-danger" title="${esc(a.status_reason)}">配额耗尽</span>`;
         } else if (a.status === 'low_quota') {
@@ -2936,41 +3015,8 @@
           statusBadge = `<span class="badge badge-success" title="${esc(a.status_reason)}">正常 (${a.health_score ? a.health_score.toFixed(0) : 100}分)</span>`;
         }
 
-        let primQuotaHtml = '<span style="color:var(--text-tertiary);">—</span>';
-        if (a.primary_window && a.primary_window.used_percent !== null && a.primary_window.used_percent !== undefined) {
-          const used = a.primary_window.used_percent;
-          let colorClass = 'progress-fill-emerald';
-          if (used >= 90) colorClass = 'progress-fill-red';
-          else if (used >= 75) colorClass = 'progress-fill-amber';
-          else if (used >= 50) colorClass = 'progress-fill-yellow';
-
-          let extraHint = '';
-          if (a.primary_window.reset_after_sec > 0) {
-            const m = Math.ceil(a.primary_window.reset_after_sec / 60);
-            extraHint = `<div style="font-size: 10.5px; color: var(--text-tertiary);">${m > 60 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : m + 'm'} 后重置</div>`;
-          }
-          primQuotaHtml = `
-            <div style="font-size: 11.5px; font-family: var(--font-mono);">已用 ${used.toFixed(1)}%</div>
-            <div class="progress-track"><div class="progress-fill ${colorClass}" style="width: ${Math.min(used, 100)}%;"></div></div>
-            ${extraHint}
-            ${formatQuotaForecast(a.primary_window.forecast)}
-          `;
-        }
-
-        let secQuotaHtml = '<span style="color:var(--text-tertiary);">—</span>';
-        if (a.secondary_window && a.secondary_window.used_percent !== null && a.secondary_window.used_percent !== undefined) {
-          const used = a.secondary_window.used_percent;
-          let colorClass = 'progress-fill-emerald';
-          if (used >= 90) colorClass = 'progress-fill-red';
-          else if (used >= 75) colorClass = 'progress-fill-amber';
-          else if (used >= 50) colorClass = 'progress-fill-yellow';
-
-          secQuotaHtml = `
-            <div style="font-size: 11.5px; font-family: var(--font-mono);">已用 ${used.toFixed(1)}%</div>
-            <div class="progress-track"><div class="progress-fill ${colorClass}" style="width: ${Math.min(used, 100)}%;"></div></div>
-            ${formatQuotaForecast(a.secondary_window.forecast)}
-          `;
-        }
+        const primQuotaHtml = renderQuotaWindow(a.primary_window);
+        const secQuotaHtml = renderQuotaWindow(a.secondary_window);
 
         const planBadge = a.plan_type ? `<span class="badge badge-purple" style="font-size:10px; margin-left:4px;">${esc(a.plan_type)}</span>` : '';
 
@@ -3784,31 +3830,59 @@
       renderRankings();
     }
 
-    function loadActiveTabData() {
+    async function loadActiveTabData() {
       // Skip entirely while unauthenticated so the refresh timer cannot burn
       // through CPA's failed-attempt budget in the background.
       if (auth.blocked) return;
+      if (state.loading) {
+        // A load is already in flight. Queue a follow-up instead of dropping
+        // the request so filter changes made during a slow refresh are not
+        // silently lost and the UI cannot appear stuck on stale data.
+        state.reloadPending = true;
+        return;
+      }
+      const requestId = ++state.requestSeq;
+      state.loading = true;
+      setRefreshBusy(true);
+      setDataStatus('busy', '正在同步…');
+      try {
       if (state.activeTab === 'tab-overview') {
-        loadSummary();
-        loadTimeSeries();
-        loadModels();
-        // Also fetch auths for ranking tab
-        fetchJSON(API_BASE + '/auths?' + getFilterParams().toString()).then(data => {
+        // Fire every request in parallel; the auths call used to wait for all
+        // three earlier round-trips before it even started.
+        const authsPromise = fetchJSON(API_BASE + '/auths?' + getFilterParams().toString()).then(data => {
           state.authsData = data || [];
           if (rankingMode === 'auths') renderRankings();
         }).catch(() => {});
+        await Promise.all([loadSummary(), loadTimeSeries(), loadModels(), authsPromise]);
       } else if (state.activeTab === 'tab-models') {
-        loadModels();
+        await loadModels();
       } else if (state.activeTab === 'tab-integrity') {
-        loadIntegrityData();
+        await loadIntegrityData();
       } else if (state.activeTab === 'tab-providers') {
-        loadProviders();
+        await loadProviders();
       } else if (state.activeTab === 'tab-auths') {
-        loadAuths();
+        await loadAuths();
       } else if (state.activeTab === 'tab-keys') {
-        loadAPIKeys();
+        await loadAPIKeys();
       } else if (state.activeTab === 'tab-logs') {
-        loadLogs();
+        await loadLogs();
+      }
+      if (requestId === state.requestSeq) {
+        state.lastUpdatedAt = new Date();
+        setDataStatus('', '已更新 ' + state.lastUpdatedAt.toLocaleTimeString());
+      }
+      } catch (err) {
+        if (!(err instanceof AuthRequired)) {
+          console.error('load dashboard failed:', err);
+          setDataStatus('error', '同步失败，点击重试');
+        }
+      } finally {
+        state.loading = false;
+        setRefreshBusy(false);
+        if (state.reloadPending) {
+          state.reloadPending = false;
+          loadActiveTabData();
+        }
       }
     }
 

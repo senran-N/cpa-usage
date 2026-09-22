@@ -229,11 +229,13 @@ func TestEvaluateAccountQuota(t *testing.T) {
 	if q.SummaryUsedPercent == nil || *q.SummaryUsedPercent != 80.0 {
 		t.Errorf("expected summary used percent 80, got %v", q.SummaryUsedPercent)
 	}
-	if !q.InCooldown {
-		t.Errorf("expected InCooldown true")
+	// A future reset timestamp is the ordinary rolling-window reset. Without
+	// rate-limit evidence on the record it must not be reported as a cooldown.
+	if q.InCooldown || q.CooldownRemainingSeconds != 0 {
+		t.Errorf("window reset mistaken for cooldown: in_cooldown=%v remaining=%d", q.InCooldown, q.CooldownRemainingSeconds)
 	}
-	if q.CooldownRemainingSeconds != 3600 {
-		t.Errorf("expected cooldown remaining 3600s, got %d", q.CooldownRemainingSeconds)
+	if q.ResetRemainingSeconds != 3600 {
+		t.Errorf("expected reset countdown 3600s, got %d", q.ResetRemainingSeconds)
 	}
 }
 

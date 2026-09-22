@@ -221,6 +221,13 @@ type AccountHealth struct {
 	QuotaRecoverAtMS         int64     `json:"quota_recover_at_ms,omitempty"`
 	CooldownRemainingSeconds int64     `json:"cooldown_remaining_seconds"`
 	InCooldown               bool      `json:"in_cooldown"`
+	// RateLimited is true when the latest record carries real rate-limit
+	// evidence (429 / rate_limit headers / reached-window marker).
+	RateLimited bool `json:"rate_limited"`
+	// ResetRemainingSeconds is the informational countdown until the current
+	// quota window resets. A healthy, actively used account always has one; it
+	// is NOT a cooldown and must never be rendered as one.
+	ResetRemainingSeconds int64 `json:"reset_remaining_seconds"`
 }
 
 // AccountHealthSummary aggregates health counts across all accounts.
@@ -265,6 +272,15 @@ type AccountQuotaWindowDetail struct {
 	ResetAfterSec    int64                 `json:"reset_after_seconds,omitempty"`
 	IsExhausted      bool                  `json:"is_exhausted"`
 	Forecast         *AccountQuotaForecast `json:"forecast,omitempty"`
+	// Observed consumption inside this window. Upstream only reports a usage
+	// percentage, so the absolute allowance below is back-calculated from what
+	// this window actually recorded. Always an estimate, never an accounting
+	// figure: it only counts requests that passed through this proxy.
+	ConsumedTokens             int64  `json:"consumed_tokens,omitempty"`
+	ConsumedRequests           int64  `json:"consumed_requests,omitempty"`
+	EstimatedTotalTokens       *int64 `json:"estimated_total_tokens,omitempty"`
+	EstimatedRemainingTokens   *int64 `json:"estimated_remaining_tokens,omitempty"`
+	EstimatedRemainingRequests *int64 `json:"estimated_remaining_requests,omitempty"`
 }
 
 // AccountQuotaDetail represents quota snapshots and rate limit windows for an account.
@@ -281,6 +297,8 @@ type AccountQuotaDetail struct {
 	ReachedWindowSource      string                    `json:"reached_window_source,omitempty"`
 	CooldownRemainingSeconds int64                     `json:"cooldown_remaining_seconds"`
 	InCooldown               bool                      `json:"in_cooldown"`
+	RateLimited              bool                      `json:"rate_limited"`
+	ResetRemainingSeconds    int64                     `json:"reset_remaining_seconds"`
 	TotalTokensRecent        int64                     `json:"total_tokens_recent"`
 	TotalCostRecent          float64                   `json:"total_cost_recent"`
 	LastObservedAt           time.Time                 `json:"last_observed_at"`

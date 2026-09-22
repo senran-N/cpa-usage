@@ -117,9 +117,11 @@ func (s *Storage) GetAccountsQuota(filter QueryFilter, now time.Time) (*AccountQ
 		if accountObservations := observations[stat.AuthID]; accountObservations != nil {
 			if q.PrimaryWindow != nil {
 				q.PrimaryWindow.Forecast = buildQuotaForecast(q.PrimaryWindow, accountObservations.Primary, now)
+				applyWindowEstimates(q.PrimaryWindow, accountObservations.Primary, now)
 			}
 			if q.SecondaryWindow != nil {
 				q.SecondaryWindow.Forecast = buildQuotaForecast(q.SecondaryWindow, accountObservations.Secondary, now)
+				applyWindowEstimates(q.SecondaryWindow, accountObservations.Secondary, now)
 			}
 		}
 		resp.Quotas = append(resp.Quotas, q)
@@ -186,13 +188,19 @@ func EvaluateAccountHealth(stat *AuthStat, latestRec *Record, now time.Time) Acc
 	h.QuotaUsedPercent = clampPercent(latestRec.HeaderQuotaUsedPercent)
 	h.QuotaRecoverAtMS = latestRec.HeaderQuotaRecoverAtMS
 
-	// Cooldown calculation with past-timestamp safety
+	// A future quota reset timestamp is the ordinary rolling-window reset, not a
+	// rate-limit cooldown: every open quota window resets at some future moment,
+	// so treating "reset in the future" as a cooldown marks healthy, actively used
+	// accounts as unavailable. Cooldown therefore requires real rate-limit
+	// evidence on the latest record; otherwise the reset time is surfaced as an
+	// informational countdown only.
 	if latestRec.HeaderQuotaRecoverAtMS > nowMS {
-		h.CooldownRemainingSeconds = (latestRec.HeaderQuotaRecoverAtMS - nowMS + 999) / 1000
+		h.ResetRemainingSeconds = (latestRec.HeaderQuotaRecoverAtMS - nowMS + 999) / 1000
+	}
+	h.RateLimited = isRateLimited(latestRec)
+	if h.RateLimited && h.ResetRemainingSeconds > 0 {
 		h.InCooldown = true
-	} else {
-		h.CooldownRemainingSeconds = 0
-		h.InCooldown = false
+		h.CooldownRemainingSeconds = h.ResetRemainingSeconds
 	}
 
 	// 1. Re-authentication / Credential failure
@@ -210,23 +218,18 @@ func EvaluateAccountHealth(stat *AuthStat, latestRec *Record, now time.Time) Acc
 		return h
 	}
 
-	// 2. Cooldown active
+	// 2. Rate limiting, with a known recovery time
 	if h.InCooldown {
 		h.Status = HealthStatusCooldown
-		if h.CooldownRemainingSeconds > 14400 && h.CooldownRemainingSeconds <= 18300 {
-			h.StatusReason = fmt.Sprintf("5H 窗口限流冷却中 (剩余 %dm)", h.CooldownRemainingSeconds/60)
-		} else if h.CooldownRemainingSeconds > 18300 {
-			h.StatusReason = fmt.Sprintf("周/月配额限流冷却中 (剩余 %dh)", h.CooldownRemainingSeconds/3600)
-		} else {
-			h.StatusReason = fmt.Sprintf("限流冷却中 (剩余 %ds)", h.CooldownRemainingSeconds)
-		}
+		h.StatusReason = cooldownReason(h.CooldownRemainingSeconds)
 	} else if h.QuotaUsedPercent != nil && *h.QuotaUsedPercent >= 100.0 {
 		// 3. Quota exhausted
 		h.Status = HealthStatusExhausted
 		h.StatusReason = "配额已耗尽 (100%)"
-	} else if latestRec.Failed && latestRec.FailureStatusCode == 429 {
+	} else if h.RateLimited {
+		// Rate limited but the upstream did not say when it recovers.
 		h.Status = HealthStatusExhausted
-		h.StatusReason = "触发限流 (429 Too Many Requests)"
+		h.StatusReason = "已触发限流 (恢复时间未知)"
 	} else if h.QuotaUsedPercent != nil && *h.QuotaUsedPercent >= 85.0 {
 		// 4. Low quota warning
 		h.Status = HealthStatusLowQuota
@@ -348,14 +351,65 @@ func EvaluateAccountQuota(stat *AuthStat, latestRec *Record, now time.Time) Acco
 	}
 
 	if q.SummaryRecoverAtMS > nowMS {
-		q.CooldownRemainingSeconds = (q.SummaryRecoverAtMS - nowMS + 999) / 1000
-		q.InCooldown = true
-	} else {
-		q.CooldownRemainingSeconds = 0
-		q.InCooldown = false
+		q.ResetRemainingSeconds = (q.SummaryRecoverAtMS - nowMS + 999) / 1000
+	}
+	// Only real rate limiting counts as a cooldown. The summary recover time is
+	// a window reset and is reported separately as an informational countdown.
+	q.RateLimited = isRateLimited(latestRec)
+	if q.RateLimited {
+		q.InCooldown = q.ResetRemainingSeconds > 0
+		q.CooldownRemainingSeconds = q.ResetRemainingSeconds
 	}
 
 	return q
+}
+
+// cooldownReason renders a human-readable countdown for a rate limit.
+func cooldownReason(remainingSeconds int64) string {
+	switch {
+	case remainingSeconds > 18300:
+		return fmt.Sprintf("周/月配额限流冷却中 (剩余 %dh)", remainingSeconds/3600)
+	case remainingSeconds > 14400:
+		return fmt.Sprintf("5H 窗口限流冷却中 (剩余 %dm)", remainingSeconds/60)
+	case remainingSeconds > 0:
+		return fmt.Sprintf("限流冷却中 (剩余 %dm)", (remainingSeconds+59)/60)
+	default:
+		return "限流冷却中"
+	}
+}
+
+// isRateLimited reports whether a record carries evidence that the upstream
+// actually blocked the account. A future quota reset timestamp on its own is
+// NOT evidence — that is the normal rolling-window reset.
+func isRateLimited(rec *Record) bool {
+	if rec == nil {
+		return false
+	}
+	if strings.TrimSpace(rec.RateLimitReachedType) != "" {
+		return true
+	}
+	if rec.FailureStatusCode == 429 {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(rec.HeaderErrorKind)) {
+	case "rate_limit", "rate_limited", "quota", "quota_exceeded":
+		return true
+	}
+	text := strings.ToLower(strings.TrimSpace(rec.HeaderErrorCode) + " " + strings.TrimSpace(rec.FailSummary))
+	for _, p := range []string{
+		"rate_limit",
+		"rate limit",
+		"too many requests",
+		"usage_reached",
+		"quota_exceeded",
+		"quota exceeded",
+		"exceeded your current quota",
+	} {
+		if strings.Contains(text, p) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildQuotaWindow(used *float64, resetAtMS int64, windowMinutes *float64, legacyKind string, nowMS int64) *AccountQuotaWindowDetail {
@@ -484,7 +538,7 @@ func (s *Storage) fetchQuotaObservations(filter QueryFilter, now time.Time) (map
 
 	query := `
 		SELECT
-			auth_id, requested_at_unix,
+			auth_id, requested_at_unix, total_tokens,
 			header_quota_recover_at_ms, header_quota_used_percent, header_quota_window_minutes,
 			header_secondary_quota_recover_at_ms, header_secondary_quota_used_percent, header_secondary_quota_window_minutes
 		FROM usage_records
@@ -500,10 +554,10 @@ func (s *Storage) fetchQuotaObservations(filter QueryFilter, now time.Time) (map
 	observations := make(map[string]*accountQuotaObservations)
 	for rows.Next() {
 		var authID string
-		var requestedAtUnix, primaryReset, secondaryReset int64
+		var requestedAtUnix, primaryReset, secondaryReset, totalTokens int64
 		var primaryUsed, primaryMinutes, secondaryUsed, secondaryMinutes sql.NullFloat64
 		if err := rows.Scan(
-			&authID, &requestedAtUnix,
+			&authID, &requestedAtUnix, &totalTokens,
 			&primaryReset, &primaryUsed, &primaryMinutes,
 			&secondaryReset, &secondaryUsed, &secondaryMinutes,
 		); err != nil {
@@ -524,10 +578,11 @@ func (s *Storage) fetchQuotaObservations(filter QueryFilter, now time.Time) (map
 				kind = classifyQuotaWindow(primaryMinutes.Float64)
 			}
 			account.addPrimary(quotaObservation{
-				At:         time.Unix(requestedAtUnix, 0).UTC(),
-				Used:       clampFinitePercent(primaryUsed.Float64),
-				ResetAtMS:  primaryReset,
-				WindowKind: kind,
+				At:          time.Unix(requestedAtUnix, 0).UTC(),
+				Used:        clampFinitePercent(primaryUsed.Float64),
+				ResetAtMS:   primaryReset,
+				WindowKind:  kind,
+				TotalTokens: totalTokens,
 			})
 		}
 		if secondaryUsed.Valid && secondaryReset > 0 && isFinitePercent(secondaryUsed.Float64) {
@@ -536,10 +591,11 @@ func (s *Storage) fetchQuotaObservations(filter QueryFilter, now time.Time) (map
 				kind = classifyQuotaWindow(secondaryMinutes.Float64)
 			}
 			account.addSecondary(quotaObservation{
-				At:         time.Unix(requestedAtUnix, 0).UTC(),
-				Used:       clampFinitePercent(secondaryUsed.Float64),
-				ResetAtMS:  secondaryReset,
-				WindowKind: kind,
+				At:          time.Unix(requestedAtUnix, 0).UTC(),
+				Used:        clampFinitePercent(secondaryUsed.Float64),
+				ResetAtMS:   secondaryReset,
+				WindowKind:  kind,
+				TotalTokens: totalTokens,
 			})
 		}
 	}
