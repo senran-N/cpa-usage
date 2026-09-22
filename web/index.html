@@ -519,6 +519,9 @@
       overflow-x: auto;
       width: 100%;
     }
+    .price-table {
+      min-width: 1100px;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -1547,8 +1550,9 @@
         </div>
 
         <div class="table-container" style="max-height: 52vh; overflow-y: auto;">
-          <table>
-            <thead>
+          <div class="table-scroll">
+            <table class="price-table">
+              <thead>
               <tr>
                 <th>模型名称</th>
                 <th>定价来源</th>
@@ -1559,11 +1563,12 @@
                 <th>更新时间</th>
                 <th style="text-align: center;">操作</th>
               </tr>
-            </thead>
-            <tbody id="pricesTableBody">
-              <tr><td colspan="8" style="text-align: center; color: var(--text-tertiary); padding: 32px;">加载价格表中...</td></tr>
-            </tbody>
-          </table>
+              </thead>
+              <tbody id="pricesTableBody">
+                <tr><td colspan="8" style="text-align: center; color: var(--text-tertiary); padding: 32px;">加载价格表中...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
