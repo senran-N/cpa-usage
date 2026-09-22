@@ -3980,7 +3980,9 @@
     async function loadPrices() {
       try {
         const data = await fetchJSON(API_BASE + '/prices');
-        state.pricesData = (data && data.prices) || [];
+        // The pricing API returns the catalog under `models` (not `prices`).
+        // Keep the legacy `prices` fallback so older plugin responses remain usable.
+        state.pricesData = (data && (data.models || data.prices)) || [];
         renderPricesTable();
       } catch (err) {
         console.error('load prices failed:', err);

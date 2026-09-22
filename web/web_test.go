@@ -71,3 +71,10 @@ func TestDashboardCache(t *testing.T) {
 		t.Errorf("cached doc does not match fresh doc")
 	}
 }
+
+func TestDashboardPricingUsesAPIModelsField(t *testing.T) {
+	doc := Dashboard(BootConfig{UnauthenticatedAPI: false})
+	if !bytes.Contains(doc, []byte("state.pricesData = (data && (data.models || data.prices)) || [];")) {
+		t.Fatal("dashboard must read the pricing API's models field")
+	}
+}
