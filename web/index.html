@@ -519,8 +519,16 @@
       overflow-x: auto;
       width: 100%;
     }
+    .price-table-container {
+      max-height: 52vh;
+      overflow: hidden;
+    }
     .price-table {
       min-width: 1100px;
+    }
+    .price-table-container .table-scroll {
+      max-height: 52vh;
+      overflow: auto;
     }
     table {
       width: 100%;
@@ -1549,7 +1557,7 @@
           </div>
         </div>
 
-        <div class="table-container" style="max-height: 52vh; overflow-y: auto;">
+        <div class="table-container price-table-container">
           <div class="table-scroll">
             <table class="price-table">
               <thead>
